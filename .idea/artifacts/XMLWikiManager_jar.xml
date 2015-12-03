@@ -1,0 +1,16 @@
+<component name="ArtifactManager">
+  <artifact type="jar" build-on-make="true" name="XMLWikiManager:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/XMLWikiManager_jar</output-path>
+    <root id="archive" name="XMLWikiManager.jar">
+      <element id="module-output" name="XMLWikiManager" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/dom4j-2.0.0-RC1.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/xsdlib-2013.6.1.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/relaxngDatatype-20020414.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/pull-parser-2.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/jaxen-1.1.6.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/xpp3-1.1.4c.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/stax-api-1.0-2.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/jaxb-api-2.2.12.jar" path-in-jar="/" />
+    </root>
+  </artifact>
+</component>

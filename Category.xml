@@ -1,0 +1,2922 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database type="JAVAWEB" name="Category">
+    <pattern>
+        <name>Command Injection</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+Command Injection 漏洞主要表现为以下两种形式：
+
+－ 攻击者能够篡改程序执行的命令：攻击者直接控制了所执行的命令。
+
+－ 攻击者能够篡改命令的执行环境：攻击者间接地控制了所执行的命令。
+
+在这种情况下，我们着重关注第一种情况，即攻击者控制所执行命令的可能性。这种形式的 Command Injection 漏洞在以下情况下发生：
+
+1. 数据从不可信赖的数据源进入应用程序。
+
+2. 数据被用作代表应用程序所执行命令的字符串，或字符串的一部分。
+
+3. 通过命令的执行，应用程序会授予攻击者一种原本不该拥有的特权或能力。
+
+例 1：下面这段来自系统实用程序的代码根据系统属性 APPHOME 来决定其安装目录，然后根据指定目录的相对路径执行一个初始化脚本。
+
+
+	...
+	String home = System.getProperty("APPHOME"); 	String cmd = home + INITCMD;  	java.lang.Runtime.getRuntime().exec(cmd);
+	...
+
+
+例 1 中的代码使得攻击者可通过修改系统属性 APPHOME 而指向一个包含恶意版本 INITCMD 的其他路径，从而提高自己在应用程序中的权限，继而随心所欲地执行命令。由于程序不会验证从环境中读取的值，所以如果攻击者能够控制系统属性 APPHOME 的值，他们就能欺骗应用程序去运行恶意代码从而取得系统控制权。
+
+例 2：下面的代码来自一个管理 Web 应用程序，旨在使用户能够使用一个围绕 rman 实用程序的批处理文件封装器来启动 Oracle 数据库备份，然后运行一个 cleanup.bat 脚本来删除一些临时文件。脚本 rmanDB.bat 接受单个命令行参数，该参数指定了要执行的备份类型。由于访问数据库受限，所以应用程序执行备份需要具有较高权限的用户。
+
+
+...
+String btype = request.getParameter("backuptype");
+String cmd = new String("cmd.exe /K
+\"c:\\util\\rmanDB.bat "+btype+"&&c:\\util\\cleanup.bat\"")
+System.Runtime.getRuntime().exec(cmd);
+...
+
+
+这里的问题是：程序没有对读取自用户的 backuptype 参数做任何验证。通常情况下 Runtime.exec() 函数不会执行多条命令，但在这种情况下，程序会首先运行 cmd.exe shell，从而可以通过调用一次 Runtime.exec() 来执行多条命令。一旦调用了该 shell，它即会允许执行用两个与号分隔的多条命令。如果攻击者传递了一个形式为 "&& del c:\\dbms\\*.*" 的字符串，那么应用程序将随程序指定的其他命令一起执行此命令。由于该应用程序的特性，运行该应用程序需要具备与数据库进行交互所需的权限，这就意味着攻击者注入的任何命令都将通过这些权限得以运行。
+
+例 3： 下面的代码来自于一个 web 应用程序，该应用程序就允许用户访问一个可在系统中更新用户密码的接口。在特定的网络环境中更新密码时，其中的一个步骤就是在 /var/yp 目录中运行 make 命令，下面显示了此步骤的代码。
+
+
+...
+System.Runtime.getRuntime().exec("make");
+...
+
+
+这里的问题在于程序没有在它的构造中指定一个绝对路径，并且没能在执行 Runtime.exec() 调用前清除它的环境变量。如果攻击者能够修改 $PATH 变量，把它指向名为 make 恶意二进制代码，程序就会在其指定的环境下执行，然后加载该恶意二进制代码，而非原本期望的代码。由于应用程序自身的特性，运行该应用程序需要具备执行系统操作所需的权限，这意味着攻击者会利用这些权限执行自己的 make，从而可能导致攻击者完全控制系统。
+
+有些人认为在移动世界中，典型的漏洞（如 Command Injection）是无意义的 -- 为什么用户要攻击自己？但是，谨记移动平台的本质是从各种来源下载并在相同设备上运行的应用程序。恶意软件在银行应用程序附近运行的可能性很高，它们会强制扩展移动应用程序的攻击面（包括跨进程通信）。
+
+例 4：以下代码可从 Android Intent 中读取要执行的命令。
+
+
+...
+        String[] cmds = this.getIntent().getStringArrayExtra("commands");
+        Process p = Runtime.getRuntime().exec("su");
+        DataOutputStream os = new DataOutputStream(p.getOutputStream());
+        for (String cmd : cmds) {
+                os.writeBytes(cmd+"\n");
+        }
+        os.writeBytes("exit\n");
+        os.flush();
+...
+
+
+在经过 root 的设备上，恶意应用程序会强迫受攻击应用程序使用超级用户权限执行任意命令。
+
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            应当禁止用户直接控制由程序执行的命令。在用户的输入会影响命令执行的情况下，应将用户输入限制为从预定的安全命令集合中进行选择。如果输入中出现了恶意的内容，传递到命令执行函数的值将默认从安全命令集合中选择，或者程序将拒绝执行任何命令。
+
+            在需要将用户的输入用作程序命令中的参数时，由于合法的参数集合实在很大，或是难以跟踪，使得这个方法通常都不切实际。开发者通常的做法是使用黑名单。在输入之前，黑名单会有选择地拒绝或避免潜在的危险字符。但是，任何一个定义不安全内容的列表都很可能是不完整的，并且会严重地依赖于执行命令的环境。更好的方法是创建一份白名单，允许其中的字符出现在输入中，并且只接受完全由这些经认可的字符组成的输入。
+
+            攻击者可以通过修改程序运行命令的环境来间接控制这些命令的执行。我们不应当完全信赖环境，还需采取预防措施，防止攻击者利用某些控制环境的手段进行攻击。无论何时，只要有可能，都应由应用程序来控制命令，并使用绝对路径执行命令。如果编译时尚不了解路径（如在跨平台应用程序中），应该在执行过程中利用可信赖的值构建一个绝对路径。应对照一系列定义有效值的常量，仔细地检查从配置文件或者环境中读取的命令值和路径。
+
+            有时还可以执行其他检验，以检查这些来源是否已被恶意篡改。例如，如果一个配置文件为可写，程序可能会拒绝运行。如果能够预先得知有关要执行的二进制代码的信息，程序就会进行检测，以检验这个二进制代码的合法性。如果一个二进制代码始终属于某个特定的用户，或者被指定了一组特定的访问权限，这些属性就会在执行二进制代码前通过程序进行检验。
+
+            尽管可能无法完全阻止强大的攻击者为了控制程序执行的命令而对系统进行的攻击，但只要程序执行外部命令，就务必使用最小授权原则：不给予超过执行该命令所必需的权限。
+        </recommand>
+        <references>
+            [1] IDS07-J. Sanitize untrusted data passed to the Runtime.exec() method, CERT,
+            https://www.securecoding.cert.org/confluence/display/java/IDS07-J.+Sanitize+untrusted+data+passed+to+the+Runtime.exec%28%29+method
+
+            [2] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [3] CWE ID 77, CWE ID 78, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [4] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            -
+            (NIST SP 800-53 Rev.4)
+
+            [5] M7 Client Side Injection, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [6] A6 Injection Flaws, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [7] A2 Injection Flaws, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [8] A1 Injection, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [9] A1 Injection, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [10] Requirement 6.5.6, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [11] Requirement 6.3.1.1, Requirement 6.5.2, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [12] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [13] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [14] Insecure Interaction - CWE ID 116, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [15] Insecure Interaction - CWE ID 078, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [16] Insecure Interaction - CWE ID 078, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [17] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.1 -
+            (STIG 3.1)
+
+            [18] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.4 -
+            (STIG 3.4)
+
+            [19] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.5 -
+            (STIG 3.5)
+
+            [20] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.6 -
+            (STIG 3.6)
+
+            [21] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.7 -
+            (STIG 3.7)
+
+            [22] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.9 -
+            (STIG 3.9)
+
+            [23] OS Commanding, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [24] OS Commanding (WASC-31), Standards Mapping - Web Application Security Consortium Version 2.00 - (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Cross-Site Scripting:Persistent</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+Cross-Site Scripting (XSS) 漏洞在以下情况下发生：
+
+1. 数据通过一个不可信赖的数据源进入 Web 应用程序。对于 Persistent（也称为 Stored）XSS，不可信赖的源通常为数据库或其他后端数据存储，而对于 Reflected XSS，该源通常为 Web 请求。
+
+2. 未检验包含在动态内容中的数据，便将其传送给了 Web 用户。
+
+传送到 Web 浏览器的恶意内容通常采用 JavaScript 代码片段的形式，但也可能会包含一些 HTML、Flash 或者其他任意一种可以被浏览器执行的代码。基于 XSS 的攻击手段花样百出，几乎是无穷无尽的，但通常它们都会包含传输给攻击者的私人数据（如 Cookie 或者其他会话信息）。在攻击者的控制下，指引受害者进入恶意的网络内容；或者利用易受攻击的站点，对用户的机器进行其他恶意操作。
+
+
+例 1： 下面的 JSP 代码片段可根据一个已知的雇员 ID 查询数据库，并输出该雇员的姓名。
+
+
+<%...
+Statement stmt = conn.createStatement();
+ResultSet rs = stmt.executeQuery("select * from emp where id="+eid);
+if (rs != null) {
+   rs.next();
+   String name = rs.getString("name");
+}
+%>
+
+Employee Name: <%= name %>
+
+
+
+如果对 name 的值处理得当，该代码就能正常地执行各种功能；如若处理不当，就会对代码的盗取行为无能为力。这段代码暴露出的危险较小，因为 name 的值是从数据库中读取的，而且显然这些内容是由应用程序管理的。然而，如果 name 的值是由用户提供的数据产生，数据库就会成为恶意内容沟通的通道。如果不对数据库中存储的所有数据进行恰当的输入验证，那么攻击者便能在用户的 Web 浏览器中执行恶意命令。这种类型的 Persistent XSS（也称为 Stored XSS）盗取极其阴险狡猾，因为数据存储导致的间接性使得辨别威胁的难度增大，而且还提高了一个攻击影响多个用户的可能性。XSS 盗取会从访问提供留言簿 (guestbook) 的网站开始。攻击者会在这些留言簿的条目中嵌入 JavaScript，接下来所有访问该留言簿的用户都会执行这些恶意代码。
+
+
+例 2： 下面的 JSP 代码片段可从 HTTP 请求中读取雇员的 ID，eid，并将其显示给用户。
+
+
+<% String eid = request.getParameter("eid"); %>
+...
+Employee ID: <%= eid %>
+
+
+如例 1 中所述，如果 eid 只包含标准的字母或数字文本，此代码就能正确运行。如果 eid 里有包含元字符或源代码中的值，那么 Web 浏览器就会像显示 HTTP 响应那样执行代码。
+
+起初，这个例子似乎是不会轻易遭受攻击的。毕竟，有谁会输入导致恶意代码的 URL，并且还在自己的电脑上运行呢？真正的危险在于攻击者会创建恶意的 URL，然后采用电子邮件或者社会工程的欺骗手段诱使受害者访问此 URL 的链接。当受害者单击这个链接时，他们不知不觉地通过易受攻击的网络应用程序，将恶意内容带到了自己的电脑中。这种对易受攻击的 Web 应用程序进行盗取的机制通常被称为反射式 XSS。
+
+有些人认为在移动世界中，典型的 Web 应用程序漏洞（如 cross-site scripting）是无意义的 -- 为什么用户要攻击自己？但是，谨记移动平台的本质是从各种来源下载并在相同设备上运行的应用程序。恶意软件在银行应用程序附近运行的可能性很高，它们会强制扩展移动应用程序的攻击面（包括跨进程通信）。
+
+例 3：以下代码在 Android WebView 中启用了 JavaScript（默认情况下，JavaScript 为禁用状态），并根据从 Android Intent 接收到的值加载页面。
+
+
+...
+        WebView webview = (WebView) findViewById(R.id.webview);
+        webview.getSettings().setJavaScriptEnabled(true);
+        String url = this.getIntent().getExtras().getString("url");
+        webview.loadUrl(url);
+...
+
+
+如果 url 的值以 javascript: 开头，则接下来的 JavaScript 代码将在 WebView 中的 Web 页面上下文内部执行。
+
+正如例子中所显示的，XSS 漏洞是由于 HTTP 响应中包含了未经验证的数据代码而引起的。受害者遭受 XSS 攻击的途径有三种：
+
+－ 如例 1 所述，应用程序将危险数据储存在一个数据库或其他可信赖的数据存储器中。这些危险数据随后会被回写到应用程序中，并包含在动态内容中。Persistent XSS 盗取发生在如下情况：攻击者将危险内容注入到数据存储器中，且该存储器之后会被读取并包含在动态内容中。从攻击者的角度看，注入恶意内容的最佳位置莫过于一个面向许多用户，尤其是相关用户显示的区域。相关用户通常在应用程序中具备较高的特权，或相互之间交换敏感数据，这些数据对攻击者来说有利用价值。如果某一个用户执行了恶意内容，攻击者就有可能以该用户的名义执行某些需要特权的操作，或者获得该用户个人所有的敏感数据的访问权限。
+
+－ 如例 2 所述，系统从 HTTP 请求中直接读取数据，并在 HTTP 响应中返回数据。当攻击者诱使用户为易受攻击的 Web 应用程序提供危险内容，而这些危险内容随后会反馈给用户并在 Web 浏览器中执行，就会发生反射式 XSS 盗取。发送恶意内容最常用的方法是，把恶意内容作为一个参数包含在公开发表的 URL 中，或者通过电子邮件直接发送给受害者。以这种手段构造的 URL 构成了多种“网络钓鱼”(phishing) 阴谋的核心，攻击者借此诱骗受害者访问指向易受攻击站点的 URL。站点将攻击者的内容反馈给受害者以后，便会执行这些内容，接下来会把用户计算机中的各种私密信息（比如包含会话信息的 cookie）传送给攻击者，或者执行其他恶意活动。
+
+— 正如例 3 所示，应用程序之外的数据源将危险数据储存在一个数据库或其他数据存储器中，随后这些危险数据被当作可信赖的数据回写到应用程序中，并存储在动态内容中。
+]]>
+
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+针对 XSS 的解决方法是，确保在适当位置进行验证，并检验其属性是否正确。
+
+由于 XSS 漏洞出现在应用程序的输出中包含恶意数据时，因此，合乎逻辑的做法是在数据流出应用程序的前一刻对其进行验证。然而，由于 Web 应用程序常常会包含复杂而难以理解的代码，用以生成动态内容，因此，这一方法容易产生遗漏错误（遗漏验证）。降低这一风险的有效途径是对 XSS 也执行输入验证。
+
+由于 Web 应用程序必须验证输入信息以避免其他漏洞（如 SQL Injection），因此，一种相对简单的解决方法是，加强一个应用程序现有的输入验证机制，将 XSS 检测包括其中。尽管有一定的价值，但 XSS 输入验证并不能取代严格的输出验证。应用程序可能通过共享的数据存储或其他可信赖的数据源接受输入，而该数据存储所接受的输入源可能并未执行适当的输入验证。因此，应用程序不能间接地依赖于该数据或其他任意数据的安全性。这就意味着，避免 XSS 漏洞的最佳方法是验证所有进入应用程序以及由应用程序传送至用户端的数据。
+
+针对 XSS 漏洞进行验证最安全的方式是，创建一份安全字符白名单，允许其中的字符出现在 HTTP 内容中，并且只接受完全由这些经认可的字符组成的输入。例如，有效的用户名可能仅包含字母数字字符，电话号码可能仅包含 0-9 的数字。然而，这种解决方法在 Web 应用程序中通常是行不通的，因为许多字符对浏览器来说都具有特殊的含义，在写入代码时，这些字符仍应被视为合法的输入，比如一个 Web 设计版就必须接受带有 HTML 代码片段的输入。
+
+更灵活的解决方法称为黑名单方法，但其安全性较差，这种方法在进行输入之前就有选择地拒绝或避免了潜在的危险字符。为了创建这样一个列表，首先需要了解对于 Web 浏览器具有特殊含义的字符集。虽然 HTML 标准定义了哪些字符具有特殊含义，但是许多 Web 浏览器会设法更正 HTML 中的常见错误，并可能在特定的上下文中认为其他字符具有特殊含义，这就是我们不鼓励使用黑名单作为阻止 XSS 的方法的原因。卡耐基梅隆大学 (Carnegie Mellon University) 软件工程学院 (Software Engineering Institute) 下属的 CERT(R) (CERT(R) Coordination Center) 合作中心提供了有关各种上下文中认定的特殊字符的具体信息 [1]：
+
+在有关块级别元素的内容中（位于一段文本的中间）：
+
+－“<”是一个特殊字符，因为它可以引入一个标签。
+
+－“&”是一个特殊字符，因为它可以引入一个字符实体。
+
+－“>”是一个特殊字符，之所以某些浏览器将其认定为特殊字符，是基于一种假设，即该页的作者本想在前面添加一个“<”，却错误地将其遗漏了。
+
+下面的这些原则适用于属性值：
+
+－ 对于外加双引号的属性值，双引号是特殊字符，因为它们标记了该属性值的结束。
+
+－ 对于外加单引号的属性值，单引号是特殊字符，因为它们标记了该属性值的结束。
+
+－ 对于不带任何引号的属性值，空格字符（如空格符和制表符）是特殊字符。
+
+-“&”与某些特定变量一起使用时是特殊字符，因为它引入了一个字符实体。
+
+例如，在 URL 中，搜索引擎可能会在结果页面内提供一个链接，用户可以点击该链接来重新运行搜索。可以将这一方法运用于编写 URL 中的搜索查询语句，这将引入更多特殊字符：
+
+－ 空格符、制表符和换行符是特殊字符，因为它们标记了 URL 的结束。
+
+-“&”是特殊字符，因为它可引入一个字符实体或分隔 CGI 参数。
+
+－ 非 ASCII 字符（即 ISO-8859-1 编码表中所有高于 128 的字符）不允许出现在 URL 中，因此在此上下文中也被视为特殊字符。
+
+－ 在服务器端对在 HTTP 转义序列中编码的参数进行解码时，必须过滤掉输入中的“%”符号。例如，当输入中出现“%68%65%6C%6C%6F”时，只有从输入的内容中过滤掉“%”，上述字符串才能在网页上显示为“hello”。
+
+
+在 <SCRIPT> </SCRIPT> 的正文内：
+
+- 如果可以将文本直接插入到已有的脚本标签中，应该过滤掉分号、省略号、中括号和换行符。
+
+服务器端脚本：
+
+－ 如果服务器端脚本会将输入中的感叹号 (!) 转换成输出中的双引号 (")，则可能需要对此进行更多过滤。
+
+其他可能出现的情况：
+
+－ 如果攻击者在 UTF-7 中提交了一个请求，那么特殊字符“<”可能会显示为“+ADw-”，并可能会绕过过滤。如果输出包含在没有确切定义编码格式的网页中，有些浏览器就会设法根据内容自动识别编码（此处采用 UTF-7 格式）。
+
+一旦在应用程序中确定了针对 XSS 攻击执行验证的正确要点，以及验证过程中要考虑的特殊字符，下一个难点就是定义验证过程中处理各种特殊字符的方式。如果应用程序认定某些特殊字符为无效输入，那么您可以拒绝任何带有这些无效特殊字符的输入。第二种选择就是采用过滤手段来删除这些特殊字符。然而，过滤的负面作用在于，过滤内容的显示将发生改变。在需要完整显示输入内容的情况下，过滤的这种负面作用可能是无法接受的。
+
+如果必须接受带有特殊字符的输入，并将其准确地显示出来，验证机制一定要对所有特殊字符进行编码，以便删除其具有的含义。官方的 HTML 规范 [2] 提供了特殊字符对应的 ISO 8859-1 编码值的完整列表。
+
+许多应用程序服务器都试图避免应用程序出现 Cross-Site Scripting 漏洞，具体做法是为负责设置特定 HTTP 响应内容的函数提供各种实现方式，以检验是否存在进行 Cross-Site Scripting 攻击必需的字符。不要依赖运行应用程序的服务器，以此确保该应用程序的安全。开发了某个应用程序后，并不能保证在其生命周期中它会在哪些应用程序服务器中运行。由于标准和已知盗取方式的演变，我们不能保证应用程序服务器也会保持同步。
+]]>
+
+        </recommand>
+        <references>
+            [1] Understanding Malicious Content Mitigation for Web Developers, CERT,
+            http://www.cert.org/tech_tips/malicious_code_mitigation.html#9
+
+            [2] HTML 4.01 Specification, W3, http://www.w3.org/TR/html4/sgml/entities.html#h-24.2
+
+            [3] Attacks on WebView in the Android System, Tongbo Luo, Hao Hao, Wenliang Du, Yifei Wang, and Heng Yin,
+            http://www.cis.syr.edu/~wedu/Research/paper/webview_acsac2011.pdf
+
+            [4] Bifocals: AnalyzingWebView Vulnerabilities in Android Applications, Erika Chin and David Wagner,
+            http://www.cs.berkeley.edu/~emc/papers/Chin-WISA-WebViews.pdf
+
+            [5] INJECT-3: XML and HTML generation requires care, Oracle,
+            http://www.oracle.com/technetwork/java/seccodeguide-139067.html#3
+
+            [6] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [7] CWE ID 79, CWE ID 80, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [8] SI, Standards Mapping - FIPS200 - (FISMA)
+
+            [9] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [10] M7 Client Side Injection, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [11] A4 Cross Site Scripting, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [12] A1 Cross Site Scripting (XSS), Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [13] A2 Cross-Site Scripting (XSS), Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [14] A3 Cross-Site Scripting (XSS), Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [15] Requirement 6.5.4, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [16] Requirement 6.3.1.1, Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [17] Requirement 6.5.7, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [18] Requirement 6.5.7, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [19] Insecure Interaction - CWE ID 079, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [20] Insecure Interaction - CWE ID 079, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [21] Insecure Interaction - CWE ID 079, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [22] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.1 -
+            (STIG
+            3.1)
+
+            [23] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.4 -
+            (STIG
+            3.4)
+
+            [24] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.5 -
+            (STIG
+            3.5)
+
+            [25] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.6 -
+            (STIG
+            3.6)
+
+            [26] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.7 -
+            (STIG
+            3.7)
+
+            [27] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.9 -
+            (STIG
+            3.9)
+
+            [28] Cross-Site Scripting, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [29] Cross-Site Scripting (WASC-08), Standards Mapping - Web Application Security Consortium Version 2.00 -
+            (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Cross-Site Scripting:Reflected</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+Cross-Site Scripting (XSS) 漏洞在以下情况下发生：
+
+1. 数据通过一个不可信赖的数据源进入 Web 应用程序。对于 Reflected XSS，不可信赖的源通常为 Web 请求，而对于 Persisted（也称为 Stored）XSS，该源通常为数据库或其他后端数据存储。
+
+2. 未检验包含在动态内容中的数据，便将其传送给了 Web 用户。
+
+传送到 Web 浏览器的恶意内容通常采用 JavaScript 代码片段的形式，但也可能会包含一些 HTML、Flash 或者其他任意一种可以被浏览器执行的代码。基于 XSS 的攻击手段花样百出，几乎是无穷无尽的，但通常它们都会包含传输给攻击者的私人数据（如 Cookie 或者其他会话信息）。在攻击者的控制下，指引受害者进入恶意的网络内容；或者利用易受攻击的站点，对用户的机器进行其他恶意操作。
+
+
+例 1： 下面的 JSP 代码片段可从 HTTP 请求中读取雇员的 ID，eid，并将其显示给用户。
+
+
+<% String eid = request.getParameter("eid"); %>
+...
+Employee ID: <%= eid %>
+
+
+
+如果 eid 只包含标准的字母或数字文本，这个例子中的代码就能正确运行。如果 eid 里有包含元字符或源代码中的值，那么 Web 浏览器就会像显示 HTTP 响应那样执行代码。
+
+起初，这个例子似乎是不会轻易遭受攻击的。毕竟，有谁会输入导致恶意代码的 URL，并且还在自己的电脑上运行呢？真正的危险在于攻击者会创建恶意的 URL，然后采用电子邮件或者社会工程的欺骗手段诱使受害者访问此 URL 的链接。当受害者单击这个链接时，他们不知不觉地通过易受攻击的网络应用程序，将恶意内容带到了自己的电脑中。这种对易受攻击的 Web 应用程序进行盗取的机制通常被称为反射式 XSS。
+
+
+例 2： 下面的 JSP 代码片段可根据一个已知的雇员 ID 查询数据库，并输出该雇员的姓名。
+
+
+<%...
+Statement stmt = conn.createStatement();
+ResultSet rs = stmt.executeQuery("select * from emp where id="+eid);
+if (rs != null) {
+   rs.next();
+   String name = rs.getString("name");
+}
+%>
+
+Employee Name: <%= name %>
+
+
+
+如同例 1，如果对 name 的值处理得当，该代码就能正常地执行各种功能；如若处理不当，就会对代码的盗取行为无能为力。同样，这段代码暴露出的危险较小，因为 name 的值是从数据库中读取的，而且显然这些内容是由应用程序管理的。然而，如果 name 的值是由用户提供的数据产生，数据库就会成为恶意内容沟通的通道。如果不对数据库中存储的所有数据进行恰当的输入验证，那么攻击者便能在用户的 Web 浏览器中执行恶意命令。这种类型的 Persistent XSS（也称为 Stored XSS）盗取极其阴险狡猾，因为数据存储导致的间接性使得辨别威胁的难度增大，而且还提高了一个攻击影响多个用户的可能性。XSS 盗取会从访问提供留言簿 (guestbook) 的网站开始。攻击者会在这些留言簿的条目中嵌入 JavaScript，接下来所有访问该留言簿的用户都会执行这些恶意代码。
+
+有些人认为在移动世界中，典型的 Web 应用程序漏洞（如 cross-site scripting）是无意义的 -- 为什么用户要攻击自己？但是，谨记移动平台的本质是从各种来源下载并在相同设备上运行的应用程序。恶意软件在银行应用程序附近运行的可能性很高，它们会强制扩展移动应用程序的攻击面（包括跨进程通信）。
+
+例 3：以下代码在 Android WebView 中启用了 JavaScript（默认情况下，JavaScript 为禁用状态），并根据从 Android Intent 接收到的值加载页面。
+
+
+...
+        WebView webview = (WebView) findViewById(R.id.webview);
+        webview.getSettings().setJavaScriptEnabled(true);
+        String url = this.getIntent().getExtras().getString("url");
+        webview.loadUrl(url);
+...
+
+
+如果 url 的值以 javascript: 开头，则接下来的 JavaScript 代码将在 WebView 中的 Web 页面上下文内部执行。
+
+正如例子中所显示的，XSS 漏洞是由于 HTTP 响应中包含了未经验证的数据代码而引起的。受害者遭受 XSS 攻击的途径有三种：
+
+－ 如例 1 所述，系统从 HTTP 请求中直接读取数据，并在 HTTP 响应中返回数据。当攻击者诱使用户为易受攻击的 Web 应用程序提供危险内容，而这些危险内容随后会反馈给用户并在 Web 浏览器中执行，就会发生反射式 XSS 盗取。发送恶意内容最常用的方法是，把恶意内容作为一个参数包含在公开发表的 URL 中，或者通过电子邮件直接发送给受害者。以这种手段构造的 URL 构成了多种“网络钓鱼”(phishing) 阴谋的核心，攻击者借此诱骗受害者访问指向易受攻击站点的 URL。站点将攻击者的内容反馈给受害者以后，便会执行这些内容，接下来会把用户计算机中的各种私密信息（比如包含会话信息的 cookie）传送给攻击者，或者执行其他恶意活动。
+
+－ 如例 2 所述，应用程序将危险数据储存在一个数据库或其他可信赖的数据存储器中。这些危险数据随后会被回写到应用程序中，并包含在动态内容中。Persistent XSS 盗取发生在如下情况：攻击者将危险内容注入到数据存储器中，且该存储器之后会被读取并包含在动态内容中。从攻击者的角度看，注入恶意内容的最佳位置莫过于一个面向许多用户，尤其是相关用户显示的区域。相关用户通常在应用程序中具备较高的特权，或相互之间交换敏感数据，这些数据对攻击者来说有利用价值。如果某一个用户执行了恶意内容，攻击者就有可能以该用户的名义执行某些需要特权的操作，或者获得该用户个人所有的敏感数据的访问权限。
+
+— 正如例 3 所示，应用程序之外的数据源将危险数据储存在一个数据库或其他数据存储器中，随后这些危险数据被当作可信赖的数据回写到应用程序中，并存储在动态内容中。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+针对 XSS 的解决方法是，确保在适当位置进行验证，并检验其属性是否正确。
+
+由于 XSS 漏洞出现在应用程序的输出中包含恶意数据时，因此，合乎逻辑的做法是在数据流出应用程序的前一刻对其进行验证。然而，由于 Web 应用程序常常会包含复杂而难以理解的代码，用以生成动态内容，因此，这一方法容易产生遗漏错误（遗漏验证）。降低这一风险的有效途径是对 XSS 也执行输入验证。
+
+由于 Web 应用程序必须验证输入信息以避免其他漏洞（如 SQL Injection），因此，一种相对简单的解决方法是，加强一个应用程序现有的输入验证机制，将 XSS 检测包括其中。尽管有一定的价值，但 XSS 输入验证并不能取代严格的输出验证。应用程序可能通过共享的数据存储或其他可信赖的数据源接受输入，而该数据存储所接受的输入源可能并未执行适当的输入验证。因此，应用程序不能间接地依赖于该数据或其他任意数据的安全性。这就意味着，避免 XSS 漏洞的最佳方法是验证所有进入应用程序以及由应用程序传送至用户端的数据。
+
+针对 XSS 漏洞进行验证最安全的方式是，创建一份安全字符白名单，允许其中的字符出现在 HTTP 内容中，并且只接受完全由这些经认可的字符组成的输入。例如，有效的用户名可能仅包含字母数字字符，电话号码可能仅包含 0-9 的数字。然而，这种解决方法在 Web 应用程序中通常是行不通的，因为许多字符对浏览器来说都具有特殊的含义，在写入代码时，这些字符仍应被视为合法的输入，比如一个 Web 设计版就必须接受带有 HTML 代码片段的输入。
+
+更灵活的解决方法称为黑名单方法，但其安全性较差，这种方法在进行输入之前就有选择地拒绝或避免了潜在的危险字符。为了创建这样一个列表，首先需要了解对于 Web 浏览器具有特殊含义的字符集。虽然 HTML 标准定义了哪些字符具有特殊含义，但是许多 Web 浏览器会设法更正 HTML 中的常见错误，并可能在特定的上下文中认为其他字符具有特殊含义，这就是我们不鼓励使用黑名单作为阻止 XSS 的方法的原因。卡耐基梅隆大学 (Carnegie Mellon University) 软件工程学院 (Software Engineering Institute) 下属的 CERT(R) (CERT(R) Coordination Center) 合作中心提供了有关各种上下文中认定的特殊字符的具体信息 [1]：
+
+在有关块级别元素的内容中（位于一段文本的中间）：
+
+－“<”是一个特殊字符，因为它可以引入一个标签。
+
+－“&”是一个特殊字符，因为它可以引入一个字符实体。
+
+－“>”是一个特殊字符，之所以某些浏览器将其认定为特殊字符，是基于一种假设，即该页的作者本想在前面添加一个“<”，却错误地将其遗漏了。
+
+下面的这些原则适用于属性值：
+
+－ 对于外加双引号的属性值，双引号是特殊字符，因为它们标记了该属性值的结束。
+
+－ 对于外加单引号的属性值，单引号是特殊字符，因为它们标记了该属性值的结束。
+
+－ 对于不带任何引号的属性值，空格字符（如空格符和制表符）是特殊字符。
+
+-“&”与某些特定变量一起使用时是特殊字符，因为它引入了一个字符实体。
+
+例如，在 URL 中，搜索引擎可能会在结果页面内提供一个链接，用户可以点击该链接来重新运行搜索。可以将这一方法运用于编写 URL 中的搜索查询语句，这将引入更多特殊字符：
+
+－ 空格符、制表符和换行符是特殊字符，因为它们标记了 URL 的结束。
+
+-“&”是特殊字符，因为它可引入一个字符实体或分隔 CGI 参数。
+
+－ 非 ASCII 字符（即 ISO-8859-1 编码表中所有高于 128 的字符）不允许出现在 URL 中，因此在此上下文中也被视为特殊字符。
+
+－ 在服务器端对在 HTTP 转义序列中编码的参数进行解码时，必须过滤掉输入中的“%”符号。例如，当输入中出现“%68%65%6C%6C%6F”时，只有从输入的内容中过滤掉“%”，上述字符串才能在网页上显示为“hello”。
+
+
+在 <SCRIPT> </SCRIPT> 的正文内：
+
+- 如果可以将文本直接插入到已有的脚本标签中，应该过滤掉分号、省略号、中括号和换行符。
+
+服务器端脚本：
+
+－ 如果服务器端脚本会将输入中的感叹号 (!) 转换成输出中的双引号 (")，则可能需要对此进行更多过滤。
+
+其他可能出现的情况：
+
+－ 如果攻击者在 UTF-7 中提交了一个请求，那么特殊字符“<”可能会显示为“+ADw-”，并可能会绕过过滤。如果输出包含在没有确切定义编码格式的网页中，有些浏览器就会设法根据内容自动识别编码（此处采用 UTF-7 格式）。
+
+一旦在应用程序中确定了针对 XSS 攻击执行验证的正确要点，以及验证过程中要考虑的特殊字符，下一个难点就是定义验证过程中处理各种特殊字符的方式。如果应用程序认定某些特殊字符为无效输入，那么您可以拒绝任何带有这些无效特殊字符的输入。第二种选择就是采用过滤手段来删除这些特殊字符。然而，过滤的负面作用在于，过滤内容的显示将发生改变。在需要完整显示输入内容的情况下，过滤的这种负面作用可能是无法接受的。
+
+如果必须接受带有特殊字符的输入，并将其准确地显示出来，验证机制一定要对所有特殊字符进行编码，以便删除其具有的含义。官方的 HTML 规范 [2] 提供了特殊字符对应的 ISO 8859-1 编码值的完整列表。
+
+许多应用程序服务器都试图避免应用程序出现 Cross-Site Scripting 漏洞，具体做法是为负责设置特定 HTTP 响应内容的函数提供各种实现方式，以检验是否存在进行 Cross-Site Scripting 攻击必需的字符。不要依赖运行应用程序的服务器，以此确保该应用程序的安全。开发了某个应用程序后，并不能保证在其生命周期中它会在哪些应用程序服务器中运行。由于标准和已知盗取方式的演变，我们不能保证应用程序服务器也会保持同步。
+
+
+Tips:
+
+1. HP Fortify 安全编码规则将就 SQL Injection 和 Access Control 提出警告：当把不受信任的数据写入数据库时数据库将出现问题，并且会将数据库当作不受信任数据的来源，因为可能导致 XSS 漏洞。如果数据库在您的环境中是可信赖的资源，则使用自定义筛选器筛选出包含 DATABASE 污染标志或来自数据库源的数据流问题。尽管如此，对所有从数据库中读取的内容进行验证仍然是较好的做法。
+
+2. 虽然使用 URL 对不可信数据进行编码可以防止许多 XSS 攻击，但部分浏览器（尤其是 Internet Explorer 6 和 7 以及其他浏览器）在将数据传递给 JavaScript 解释器之前，会自动在文档对象模型 (DOM) 中的特定位置对其内容进行解码。为了反映出其危险之处，规则包不再认为 URL 编码例程足以防御 cross-site scripting 攻击。如果对数据值进行 URL 编码并随后输出，Fortify 将会报告存在 Cross-Site Scripting: Poor Validation 漏洞。
+
+3. Fortify RTA adds protection against this category.
+]]>
+        </recommand>
+        <references>
+            [1] Understanding Malicious Content Mitigation for Web Developers, CERT,
+            http://www.cert.org/tech_tips/malicious_code_mitigation.html#9
+
+            [2] HTML 4.01 Specification, W3, http://www.w3.org/TR/html4/sgml/entities.html#h-24.2
+
+            [3] Attacks on WebView in the Android System, Tongbo Luo, Hao Hao, Wenliang Du, Yifei Wang, and Heng Yin,
+            http://www.cis.syr.edu/~wedu/Research/paper/webview_acsac2011.pdf
+
+            [4] Bifocals: AnalyzingWebView Vulnerabilities in Android Applications, Erika Chin and David Wagner,
+            http://www.cs.berkeley.edu/~emc/papers/Chin-WISA-WebViews.pdf
+
+            [5] INJECT-3: XML and HTML generation requires care, Oracle,
+            http://www.oracle.com/technetwork/java/seccodeguide-139067.html#3
+
+            [6] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [7] CWE ID 79, CWE ID 80, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [8] SI, Standards Mapping - FIPS200 - (FISMA)
+
+            [9] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [10] M7 Client Side Injection, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [11] A4 Cross Site Scripting, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [12] A1 Cross Site Scripting (XSS), Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [13] A2 Cross-Site Scripting (XSS), Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [14] A3 Cross-Site Scripting (XSS), Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [15] Requirement 6.5.4, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [16] Requirement 6.3.1.1, Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [17] Requirement 6.5.7, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [18] Requirement 6.5.7, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [19] Insecure Interaction - CWE ID 079, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [20] Insecure Interaction - CWE ID 079, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [21] Insecure Interaction - CWE ID 079, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [22] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.1 -
+            (STIG
+            3.1)
+
+            [23] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.4 -
+            (STIG
+            3.4)
+
+            [24] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.5 -
+            (STIG
+            3.5)
+
+            [25] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.6 -
+            (STIG
+            3.6)
+
+            [26] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.7 -
+            (STIG
+            3.7)
+
+            [27] APP3510 CAT I, APP3580 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.9 -
+            (STIG
+            3.9)
+
+            [28] Cross-Site Scripting, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [29] Cross-Site Scripting (WASC-08), Standards Mapping - Web Application Security Consortium Version 2.00 -
+            (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Open Redirect</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+通过重定向，Web 应用程序能够引导用户访问同一应用程序内的不同网页或访问外部站点。应用程序利用重定向来帮助进行站点导航，有时还跟踪用户退出站点的方式。当 Web 应用程序将客户端重定向到攻击者可以控制的任意 URL 时，就会发生 Open redirect 漏洞：
+
+攻击者可能利用 Open redirect 漏洞诱骗用户访问某个可信赖站点的 URL，并将他们重定向到恶意站点。攻击者通过对 URL 进行编码，使最终用户很难注意到重定向的恶意目标，即使将这一目标作为 URL 参数传递给可信赖的站点时也会发生这种情况。因此，Open redirect 常被作为钓鱼手段的一种而滥用，攻击者通过这种方式来获取最终用户的敏感数据。
+
+
+例 1：以下 JSP 代码会在用户打开链接时，指示用户浏览器打开从 dest 请求参数中解析的 URL。
+
+
+    <%
+        ...
+        String strDest = request.getParameter("dest");
+        pageContext.forward(strDest);
+        ...
+    %>
+
+
+如果受害者收到一封电子邮件，指示该用户打开 "http://trusted.example.com/ecommerce/redirect.asp?dest=www.wilyhacker.com" 链接，用户有可能会打开该链接，因为他会认为这个链接将转到可信赖的站点。然而，一旦用户打开该链接，上面的代码会将浏览器重定向至 "http://www.wilyhacker.com"。
+
+很多用户都被告知，要始终监视通过电子邮件收到的 URL，以确保链接指向一个他们所熟知的可信赖站点。尽管如此，如果攻击者对目标 URL 进行 16 进制编码：
+"http://trusted.example.com/ecommerce/redirect.asp?dest=%77%69%6C%79%68%61%63%6B%65%72%2E%63%6F%6D"
+
+那么，即使再聪明的最终用户也可能会被欺骗，打开该链接。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+不应当允许未验证的用户输入控制重定向机制中的目标 URL。而应采用间接方法：创建一份合法 URL 列表，用户可以指定其中的内容并且只能从中进行选择。利用这种方法，就绝不会直接使用用户提供的输入来指定要重定向到的 URL。
+
+例 2：以下代码引用了一个通过有效 URL 传播的数组。用户单击的链接将通过与所需 URL 对应的数组索引来传递。
+
+
+    <%
+        ...
+        try {             int strDest = Integer.parseInt(request.getParameter("dest"));             if((strDest >= 0) && (strDest <= strURLArray.length -1 ))             {                 strFinalURL = strURLArray[strDest];                 pageContext.forward(strFinalURL);             }         }         catch (NumberFormatException nfe) {             // Handle exception
+            ...
+        }
+        ...
+    %>
+
+
+但在某些情况下，这种方法并不可行，因为这样一份合法 URL 列表过于庞大、难以跟踪。这种情况下，有一种类似的方法也能限制用于重定向用户的域，这种方法至少可以防止攻击者向用户发送恶意的外部站点。
+
+
+Tips:
+
+1. 许多现代 Web 框架都提供对用户输入执行验证的机制。其中包括 Struts 和 Spring MVC。为了突出显示未经验证的输入源，HP Fortify 安全编码规则包会对 HP Fortify Static Code Analyzer（HP Fortify 静态代码分析器）报告的问题动态地重新调整优先级，具体方法是在采用框架验证机制时降低这些问题被利用的可能性并提供相应的依据。我们将这种功能称之为上下文敏感排序。为了进一步帮助 HP Fortify 用户执行审计过程，HP Fortify 软件安全研究团队开发了 Data Validation（数据验证）项目模板，该模板根据应用于输入源的验证机制按文件夹对问题进行了分组。
+]]>
+        </recommand>
+        <references>
+            [1] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [2] CWE ID 601, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [3] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [4] M1 Weak Server Side Controls, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [5] A1 Unvalidated Input, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [6] A10 Unvalidated Redirects and Forwards, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [7] A10 Unvalidated Redirects and Forwards, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [8] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [9] Requirement 6.3.1.1, Standards Mapping - Payment Card Industry Data Security Standard Version 1.2 - (PCI
+            1.2)
+
+            [10] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [11] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [12] Insecure Interaction - CWE ID 601, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [13] Insecure Interaction - CWE ID 601, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [14] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.1
+            - (STIG
+            3.1)
+
+            [15] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.4
+            - (STIG
+            3.4)
+
+            [16] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.5
+            - (STIG
+            3.5)
+
+            [17] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.6
+            - (STIG
+            3.6)
+
+            [18] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.7
+            - (STIG
+            3.7)
+
+            [19] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.9
+            - (STIG
+            3.9)
+
+            [20] Content Spoofing, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [21] URL Redirector Abuse (WASC-38), Standards Mapping - Web Application Security Consortium Version 2.00 -
+            (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Password Management: Hardcoded Password</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+使用硬编码方式处理密码绝非好方法。这不仅是因为所有项目开发人员都可以使用通过硬编码方式处理的密码，而且还会使解决这一问题变得极其困难。一旦代码投入使用，除非对软件进行修补，否则您再也不能改变密码了。如果帐户中的密码保护减弱，系统所有者将被迫在安全性和可行性之间做出选择。
+
+
+例 1：以下代码用 hardcoded password 来连接数据库：
+
+
+...
+DriverManager.getConnection(url, "scott", "tiger");
+...
+
+
+该代码可以正常运行，但是任何有该代码权限的人都能得到这个密码。一旦程序发布，将无法变更数据库用户“scott”和密码“tiger”，除非是要修补该程序。心怀不轨的雇员可以利用手中掌握的信息访问权限入侵系统。更糟的是，如果攻击者能够访问应用程序的字节代码，那么他们就可以利用 javap -c 命令访问已经过反汇编的代码，而在这些代码中恰恰包含着用户使用过的密码值。我们可以从以下看到上述例子的执行结果：
+
+
+javap -c ConnMngr.class
+
+22: ldc   #36; //String jdbc:mysql://ixne.com/rxsql
+24: ldc   #38; //String scott
+26: ldc   #17; //String tiger
+
+
+在移动世界中，由于设备丢失的几率较高，因此密码管理是一个非常棘手的问题。
+例 2：以下代码可使用硬编码的用户名和密码设置身份验证，从而使用 Android WebView 查看受保护页面。
+
+...
+webview.setWebViewClient(new WebViewClient() {
+  public void onReceivedHttpAuthRequest(WebView view,
+        HttpAuthHandler handler, String host, String realm) {
+    handler.proceed("guest", "allow");
+  }
+});
+...
+
+
+与例 1 相似，该代码可以正常运行，但是任何有该代码权限的人都能得到这个密码。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+绝不能对密码进行硬编码。通常情况下，应对密码加以模糊化，并在外部资源文件中进行管理。在系统中采用明文的形式存储密码，会造成任何有充分权限的人读取和无意中误用密码。至少，密码要先经过 hash 处理再存储。
+
+有些第三方产品宣称可以采用更加安全的方式管理密码。例如，WebSphere Application Server 4.x 用简单的异或加密算法加密数值，但是请不要对诸如此类的加密方式给予完全的信任。WebSphere 以及其他一些应用服务器通常都只提供过期的且相对较弱的加密机制，这对于安全性敏感的环境来说是远远不够的。一般较为安全的解决方法是采用由用户创建的所有者机制，而这似乎也是目前最好的方法。
+
+对于 Android 以及其他任何使用 SQLite 数据库的平台来说，SQLCipher 是一个好选择 -- 对 SQLite 数据库的扩展为数据库文件提供了透明的 256 位 AES 加密。因此，凭证可以存储在加密的数据库中。
+
+例 3：以下代码演示了在将所需的二进制码和存储凭证下载到数据库文件后，将 SQLCipher 集成到 Android 应用程序中的方法。
+
+import net.sqlcipher.database.SQLiteDatabase;
+...
+  SQLiteDatabase.loadLibs(this);   File dbFile = getDatabasePath("credentials.db");   dbFile.mkdirs();   dbFile.delete();   SQLiteDatabase db = SQLiteDatabase.openOrCreateDatabase(dbFile, "credentials", null);   db.execSQL("create table credentials(u, p)");   db.execSQL("insert into credentials(u, p) values(?, ?)", new Object[]{username, password});
+...
+
+
+请注意，对 android.database.sqlite.SQLiteDatabase 的引用可以使用 net.sqlcipher.database.SQLiteDatabase 代替。
+
+要在 WebView 存储上启用加密，需要使用 sqlcipher.so 库重新编译 WebKit。
+
+
+Tips:
+
+1. 可使用 Fortify Java Annotations、FortifyPassword 和 FortifyNotPassword 来指示哪些字段和变量代表密码。
+
+2. 识别 null password、empty password 和 hardcoded password 时，默认规则只会考虑包含 password 字符的字段和变量。但是，使用 Custom Rules Editor（自定义规则编辑器）提供的 Password Management（密码管理）向导即可轻松创建能够从自定义字段和变量中检测出密码管理问题的规则。
+]]>
+        </recommand>
+        <references>
+            [1] SQLCipher., http://sqlcipher.net/
+
+            [2] MSC03-J. Never hard code sensitive information, CERT,
+            https://www.securecoding.cert.org/confluence/display/java/MSC03-J.+Never+hard+code+sensitive+information
+
+            [3] CWE ID 259, CWE ID 798, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [4] IA, Standards Mapping - FIPS200 - (FISMA)
+
+            [5] SC-28 Protection of Information at Rest (P1), Standards Mapping - NIST Special Publication 800-53
+            Revision 4 -
+            (NIST SP 800-53 Rev.4)
+
+            [6] M2 Insecure Data Storage, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [7] A8 Insecure Storage, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [8] A8 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [9] A7 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [10] A6 Sensitive Data Exposure, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [11] Requirement 3.4, Requirement 6.5.8, Requirement 8.4, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 1.1 - (PCI 1.1)
+
+            [12] Requirement 3.4, Requirement 6.3.1.3, Requirement 6.5.8, Requirement 8.4, Standards Mapping - Payment
+            Card
+            Industry Data Security Standard Version 1.2 - (PCI 1.2)
+
+            [13] Requirement 3.4, Requirement 6.5.3, Requirement 8.4, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 2.0 - (PCI 2.0)
+
+            [14] Requirement 3.4, Requirement 6.5.3, Requirement 8.2.1, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 3.0 - (PCI 3.0)
+
+            [15] Porous Defenses - CWE ID 259, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [16] Porous Defenses - CWE ID 798, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [17] Porous Defenses - CWE ID 798, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [18] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.1 - (STIG 3.1)
+
+            [19] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.4 - (STIG 3.4)
+
+            [20] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.5 - (STIG 3.5)
+
+            [21] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.6 - (STIG 3.6)
+
+            [22] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.7 - (STIG 3.7)
+
+            [23] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.9 - (STIG 3.9)
+
+            [24] Insufficient Authentication, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24
+            + 2)
+
+            [25] Insufficient Authentication (WASC-01), Standards Mapping - Web Application Security Consortium Version
+            2.00 -
+            (WASC 2.00)
+
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Path Manipulation</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+当满足以下两个条件时，就会产生 path manipulation 错误：
+
+1. 攻击者能够指定某一 file system 操作中所使用的路径。
+
+2. 攻击者可以通过指定特定资源来获取某种权限，而这种权限在一般情况下是不可能获得的。
+
+例如，在某一程序中，攻击者可以获得特定的权限，以重写指定的文件或是在其控制的配置环境下运行程序。
+
+
+例 1： 下面的代码使用来自于 HTTP 请求的输入来创建一个文件名。程序员没有考虑到攻击者可能使用像“../../tomcat/conf/server.xml”一样的文件名，从而导致应用程序删除它自己的配置文件。
+
+
+String rName = request.getParameter("reportName");
+File rFile = new File("/usr/local/apfr/reports/" + rName);
+...
+rFile.delete();
+
+
+例 2： 下面的代码使用来自于配置文件的输入来决定打开哪个文件，并返回给用户。如果程序在一定的权限下运行，且恶意用户能够篡改配置文件，那么他们可以通过程序读取系统中以 .txt 扩展名结尾的所有文件。
+
+
+fis = new FileInputStream(cfg.getProperty("sub")+".txt");
+amt = fis.read(arr);
+out.println(arr);
+
+
+有些人认为在移动世界中，典型的漏洞（如 path manipulation）是无意义的 -- 为什么用户要攻击自己？但是，谨记移动平台的本质是从各种来源下载并在相同设备上运行的应用程序。恶意软件在银行应用程序附近运行的可能性很高，它们会强制扩展移动应用程序的攻击面（包括跨进程通信）。
+
+例 3：以下代码将例 1 改编为适用于 Android 平台。
+
+
+...
+        String rName = this.getIntent().getExtras().getString("reportName");
+        File rFile = getBaseContext().getFileStreamPath(rName);
+...
+        rFile.delete();
+...
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+防止 path manipulation 的最佳方法是采用一些间接手段：例如创建一份合法资源名的列表，并且规定用户只能选择其中的文件名。通过这种方法，用户就不能直接由自己来指定资源的名称了。
+
+但在某些情况下，这种方法并不可行，因为这样一份合法资源名的列表过于庞大、难以跟踪。因此，程序员通常在这种情况下采用黑名单的办法。在输入之前，黑名单会有选择地拒绝或避免潜在的危险字符。但是，任何这样一份黑名单都不可能是完整的，而且将随着时间的推移而过时。更好的方法是创建一份白名单，允许其中的字符出现在资源名称中，且只接受完全由这些被认可的字符组成的输入。
+
+
+Tips:
+
+1. 程序在执行输入验证时，应确保该验证正确无误，且使用 Custom Rules Editor（自定义规则编辑器）为该验证例程创建适当的规则。
+
+2. 执行本身有效的黑名单是一件非常困难的事情，因此，如果验证逻辑完全依赖于黑名单方法，那么有必要对这种逻辑进行质疑。鉴于不同类型的输入编码以及各种元字符集在不同的操作系统、数据库或其他资源中可能有不同的含义，确定随着需求的不断变化，黑名单能否方便、正确、完整地进行更新。
+
+3. 许多现代 Web 框架都提供对用户输入执行验证的机制。其中包括 Struts 和 Spring MVC。为了突出显示未经验证的输入源，HP Fortify 安全编码规则包会对 HP Fortify Static Code Analyzer（HP Fortify 静态代码分析器）报告的问题动态地重新调整优先级，具体方法是在采用框架验证机制时降低这些问题被利用的可能性并提供相应的依据。我们将这种功能称之为上下文敏感排序。为了进一步帮助 HP Fortify 用户执行审计过程，HP Fortify 软件安全研究团队开发了 Data Validation（数据验证）项目模板，该模板根据应用于输入源的验证机制按文件夹对问题进行了分组。
+]]>
+        </recommand>
+        <references>
+            [1] Exploiting Software, G. Hoglund, G. McGraw, Addison-Wesley, 2004
+
+            [2] FIO00-J. Do not operate on files in shared directories, CERT,
+            https://www.securecoding.cert.org/confluence/display/java/FIO00-J.+Do+not+operate+on+files+in+shared+directories
+
+            [3] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [4] CWE ID 22, CWE ID 73, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [5] SI, Standards Mapping - FIPS200 - (FISMA)
+
+            [6] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [7] M8 Security Decisions Via Untrusted Inputs, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP
+            Mobile
+            2014)
+
+            [8] A1 Unvalidated Input, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [9] A4 Insecure Direct Object Reference, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [10] A4 Insecure Direct Object References, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [11] A4 Insecure Direct Object References, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [12] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [13] Requirement 6.3.1.1, Requirement 6.5.4, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [14] Requirement 6.5.8, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [15] Requirement 6.5.8, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [16] Risky Resource Management - CWE ID 426, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [17] Risky Resource Management - CWE ID 022, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [18] Risky Resource Management - CWE ID 022, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [19] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.1
+            - (STIG
+            3.1)
+
+            [20] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.4
+            - (STIG
+            3.4)
+
+            [21] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.5
+            - (STIG
+            3.5)
+
+            [22] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.6
+            - (STIG
+            3.6)
+
+            [23] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.7
+            - (STIG
+            3.7)
+
+            [24] APP3510 CAT I, APP3600 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.9
+            - (STIG
+            3.9)
+
+            [25] Path Traversal, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [26] Path Traversal (WASC-33), Standards Mapping - Web Application Security Consortium Version 2.00 - (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Privacy Violation</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+Privacy Violation 会在以下情况下发生：
+
+1. 用户私人信息进入了程序。
+
+2. 数据被写到了一个外部介质，例如控制台、file system 或网络。
+
+
+例 1： 以下代码包含了一个日志记录语句，该语句通过在日志文件中存储记录信息跟踪添加到数据库中的各条记录信息。在存储的其他数值中，getPassword() 函数可以返回一个由用户提供的、与用户帐号相关的明文密码。
+
+
+pass = getPassword();
+...
+dbmsLog.println(id+":"+pass+":"+type+":"+tstamp);
+
+
+在上面例子中，代码采用日志的形式将明文密码记录到了 file system 中。虽然许多开发人员认为 file system 是存储数据的安全场所，但是不应对其予以绝对的信任，特别是在涉及到隐私问题时。
+
+在移动世界中隐私是最令人担心的问题之一，其原因有以下两点。一是设备丢失的几率较高。第二点与移动应用程序之间的进程间通信有关。移动平台的本质是从各种来源下载并在相同设备上运行的应用程序。因为恶意软件在银行应用程序附近运行的可能性很高，所以应用程序的作者需要注意消息所包含的信息，这些消息将会发送给在设备上运行的其他应用程序。移动应用程序之间的进程间通信不应包含敏感信息。
+
+例 2：以下代码可读取存储在 Android WebView 上的给定站点的用户名和密码，并广播给所有注册的接收者。
+
+...
+webview.setWebViewClient(new WebViewClient() {   public void onReceivedHttpAuthRequest(WebView view,         HttpAuthHandler handler, String host, String realm) {     String[] credentials = view.getHttpAuthUsernamePassword(host, realm);     String username = credentials[0];     String password = credentials[1];     Intent i = new Intent();     i.setAction("SEND_CREDENTIALS");     i.putExtra("username", username);     i.putExtra("password", password);     view.getContext().sendBroadcast(i);   } });
+...
+
+
+此示例存在多个问题。首先，WebView 凭证以明文的形式存储且不经过 hash 处理。因此，如果用户拥有 root 设备（或使用仿真器），他/她就能读取存储的给定站点的密码。其次，明文凭证将被广播给所有注册的接收者，这就意味着任何使用 SEND_CREDENTIALS 收听的注册接收者都将收到消息。即使权限限制接收者人数，广播也不会受到保护；既然这样，我们也不建议将权限作为修复方式使用。
+
+可以通过多种方式将私人数据输入到程序中：
+
+— 以密码或个人信息的形式直接从用户处获取
+
+— 由应用程序访问数据库或者其他数据存储形式
+
+— 间接地从合作者或者第三方处获取
+
+通常情况下，在移动世界的背景下，该私人信息将包括（以及密码、SSN 和其他一般个人信息）：
+
+- 位置
+
+- 手机号码
+
+- 序列号和设备 ID
+
+- 网络运营商信息
+
+- 语音信箱信息
+
+
+有时，某些数据并没有贴上私人数据标签，但在特定的上下文中也有可能成为私人信息。比如，通常认为学生的学号不是私人信息，因为学号中并没有明确而公开的信息用以定位特定学生的个人信息。但是，如果学校用学生的社会保障号码生成学号，那么这时学号应被视为私人信息。
+
+安全和隐私似乎一直是一对矛盾。从安全的角度看，您应该记录所有重要的操作，以便日后可以鉴定那些非法的操作。然而，当其中牵涉到私人数据时，这种做法就存在一定风险了。
+
+虽然不安全地处理私人数据有多种形式，但是常见的风险来自于盲目的信任。程序员通常会信任程序运行的操作系统，因此认为将私人信息存放在 file system、注册表或者获得局部控制的资源中是值得信任的。尽管已经限制了某些资源的访问权限，但仍无法保证所有访问这些资源的个体都是值得信任的。例如，2004 年，一个不道德的 AOL 员工把大约 9200 万个客户的私人电子邮件地址卖给了一个通过垃圾邮件进行营销的赌博网站 [1]。
+
+鉴于此类备受瞩目的信息盗取事件，私人信息的收集与管理正日益规范化。要求各个组织应根据其经营地点、所从事的业务类型及其处理的私人数据性质，遵守下列一个或若干个联邦和州的规定：
+
+- Safe Harbor Privacy Framework [3]
+
+- Gramm-Leach Bliley Act (GLBA) [4]
+
+- Health Insurance Portability and Accountability Act (HIPAA) [5]
+
+- California SB-1386 [6]
+
+尽管制定了这些规范，Privacy Violation 漏洞仍时有发生。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+当安全和隐私的需要发生矛盾时，通常应优先考虑隐私的需要。为满足这一要求，同时又保证信息安全的需要，应在退出程序前清除所有私人信息。
+
+为加强隐私信息的管理，应不断改进保护内部隐私的原则，并严格地加以执行。这一原则应具体说明应用程序应该如何处理各种私人数据。在贵组织受到联邦或者州法律的制约时，应确保您的隐私保护原则尽量与这些法律法规保持一致。即使没有针对贵组织的相应法规，您也应当保护好客户的私人信息，以免失去客户的信任。
+
+保护私人数据的最好做法就是最大程度地减少私人数据的暴露。不应允许应用程序、流程处理以及员工访问任何私人数据，除非是出于职责以内的工作需要。正如最小授权原则一样，不应该授予访问者超出其需求的权限，对私人数据的访问权限应严格限制在尽可能小的范围内。
+
+对于移动应用程序，请确保它们从不与在设备上运行的其他应用程序进行任何敏感数据通信。存储私人数据时，通常都应加密。对于 Android 以及其他任何使用 SQLite 数据库的平台来说，SQLCipher 是一个好选择 -- 对 SQLite 数据库的扩展为数据库文件提供了透明的 256 位 AES 加密。因此，凭证可以存储在加密的数据库中。
+
+例 3：以下代码演示了在将所需的二进制码和存储凭证下载到数据库文件后，将 SQLCipher 集成到 Android 应用程序中的方法。
+
+import net.sqlcipher.database.SQLiteDatabase;
+...
+  SQLiteDatabase.loadLibs(this);   File dbFile = getDatabasePath("credentials.db");   dbFile.mkdirs();   dbFile.delete();   SQLiteDatabase db = SQLiteDatabase.openOrCreateDatabase(dbFile, "credentials", null);   db.execSQL("create table credentials(u, p)");   db.execSQL("insert into credentials(u, p) values(?, ?)", new Object[]{username, password});
+...
+
+
+请注意，对 android.database.sqlite.SQLiteDatabase 的引用可以使用 net.sqlcipher.database.SQLiteDatabase 代替。
+
+要在 WebView 存储上启用加密，需要使用 sqlcipher.so 库重新编译 WebKit。
+
+例 4：以下代码从 Android WebView 存储读取给定站点的用户名和密码，而不是将其广播到所有注册的接收器，它仅在内部广播，以便广播只能由同一应用程序的其他部分看到。
+
+...
+webview.setWebViewClient(new WebViewClient() {
+  public void onReceivedHttpAuthRequest(WebView view,
+        HttpAuthHandler handler, String host, String realm) {
+    String[] credentials = view.getHttpAuthUsernamePassword(host, realm);
+    String username = credentials[0];
+    String password = credentials[1];
+    Intent i = new Intent();
+    i.setAction("SEND_CREDENTIALS");
+    i.putExtra("username", username);
+    i.putExtra("password", password);
+    LocalBroadcastManager.getInstance(view.getContext()).sendBroadcast(i);
+  }
+});
+...
+
+
+
+
+Tips:
+
+1. 要彻底审计所有的 Privacy Violation 漏洞，措施之一就是确保自定义的规则可以识别所有进入程序的私人或敏感信息。无法自动识别多数私人数据信息。若不使用自定义规则，您执行的 Privacy Violation 漏洞检查可能是不完整的。
+
+2. 可使用 Fortify Java Annotations、FortifyPassword、FortifyNotPassword、FortifyPrivate 和 FortifyNotPrivate 来指示哪些字段和变量代表密码和私人数据。
+
+3. 许多现代 Web 框架都提供对用户输入执行验证的机制。其中包括 Struts 和 Spring MVC。为了突出显示未经验证的输入源，HP Fortify 安全编码规则包会对 HP Fortify Static Code Analyzer（HP Fortify 静态代码分析器）报告的问题动态地重新调整优先级，具体方法是在采用框架验证机制时降低这些问题被利用的可能性并提供相应的依据。我们将这种功能称之为上下文敏感排序。为了进一步帮助 HP Fortify 用户执行审计过程，HP Fortify 软件安全研究团队开发了 Data Validation（数据验证）项目模板，该模板根据应用于输入源的验证机制按文件夹对问题进行了分组。
+
+4. Fortify RTA adds protection against this category.
+]]>
+        </recommand>
+        <references>
+            [1] AOL man pleads guilty to selling 92m email addies, J. Oates, The Register, 2005,
+            http://www.theregister.co.uk/2005/02/07/aol_email_theft/
+
+            [2] Privacy Initiatives, U.S. Federal Trade Commission, http://www.ftc.gov/privacy/
+
+            [3] Safe Harbor Privacy Framework, U.S. Department of Commerce, http://www.export.gov/safeharbor/
+
+            [4] Financial Privacy: The Gramm-Leach Bliley Act (GLBA), Federal Trade Commission,
+            http://www.ftc.gov/privacy/glbact/index.html
+
+            [5] Health Insurance Portability and Accountability Act (HIPAA), U.S. Department of Human Services,
+            http://www.hhs.gov/ocr/hipaa/
+
+            [6] California SB-1386, Government of the State of California, 2002,
+            http://info.sen.ca.gov/pub/01-02/bill/sen/sb_1351-1400/sb_1386_bill_20020926_chaptered.html
+
+            [7] Writing Secure Code, Second Edition, M. Howard, D. LeBlanc, Microsoft Press, 2003
+
+            [8] SQLCipher., http://sqlcipher.net/
+
+            [9] FUNDAMENTALS-4: Establish trust boundaries, Oracle,
+            http://www.oracle.com/technetwork/java/seccodeguide-139067.html#0
+
+            [10] CONFIDENTIAL-2: Do not log highly sensitive information, Oracle,
+            http://www.oracle.com/technetwork/java/seccodeguide-139067.html#2
+
+            [11] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [12] CWE ID 359, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [13] M2 Insecure Data Storage, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [14] A6 Information Leakage and Improper Error Handling, Standards Mapping - OWASP Top 10 2007 - (OWASP
+            2007)
+
+            [15] A6 Sensitive Data Exposure, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [16] Requirement 3.2, Requirement 3.4, Requirement 4.2, Requirement 8.4, Standards Mapping - Payment Card
+            Industry
+            Data Security Standard Version 1.1 - (PCI 1.1)
+
+            [17] Requirement 3.2, Requirement 3.4, Requirement 4.2, Requirement 6.5.6, Requirement 8.4, Standards
+            Mapping -
+            Payment Card Industry Data Security Standard Version 1.2 - (PCI 1.2)
+
+            [18] Requirement 3.2, Requirement 3.4, Requirement 4.2, Requirement 6.5.5, Requirement 8.4, Standards
+            Mapping -
+            Payment Card Industry Data Security Standard Version 2.0 - (PCI 2.0)
+
+            [19] Requirement 3.2, Requirement 3.4, Requirement 4.2, Requirement 8.2.1, Standards Mapping - Payment Card
+            Industry
+            Data Security Standard Version 3.0 - (PCI 3.0)
+
+            [20] APP3210.1 CAT II, APP3310 CAT I, APP3340 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.1 - (STIG 3.1)
+
+            [21] APP3210.1 CAT II, APP3340 CAT I, Standards Mapping - Security Technical Implementation Guide Version
+            3.4 -
+            (STIG 3.4)
+
+            [22] APP3210.1 CAT II, APP3340 CAT I, Standards Mapping - Security Technical Implementation Guide Version
+            3.5 -
+            (STIG 3.5)
+
+            [23] APP3210.1 CAT II, APP3340 CAT I, Standards Mapping - Security Technical Implementation Guide Version
+            3.6 -
+            (STIG 3.6)
+
+            [24] APP3210.1 CAT II, APP3340 CAT I, Standards Mapping - Security Technical Implementation Guide Version
+            3.7 -
+            (STIG 3.7)
+
+            [25] APP3210.1 CAT II, APP3340 CAT I, Standards Mapping - Security Technical Implementation Guide Version
+            3.9 -
+            (STIG 3.9)
+
+            [26] Information Leakage, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [27] Information Leakage (WASC-13), Standards Mapping - Web Application Security Consortium Version 2.00 -
+            (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>SQL Injection</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+SQL injection 错误在以下情况下发生：
+
+1. 数据从一个不可信赖的数据源进入程序。
+
+2. 数据用于动态地构造一个 SQL 查询。
+
+例 1：以下代码动态地构造并执行了一个 SQL 查询，该查询可以搜索与指定名称相匹配的项。该查询仅会显示条目所有者与被授予权限的当前用户一致的条目。
+
+
+...
+	String userName = ctx.getAuthenticatedUserName();
+	String itemName = request.getParameter("itemName");
+	String query = "SELECT * FROM items WHERE owner = '"
+				+ userName + "' AND itemname = '"
+				+ itemName + "'";
+	ResultSet rs = stmt.execute(query);
+...
+
+
+这一代码所执行的查询遵循如下方式：
+
+
+	SELECT * FROM items
+	WHERE owner = <userName>
+	AND itemname = <itemName>;
+
+
+但是，由于这个查询是动态构造的，由一个不变的基查询字符串和一个用户输入字符串连接而成，因此只有在 itemName 不包含单引号字符时，才会正确执行这一查询。如果一个用户名为 wiley 的攻击者为 itemName 输入字符串“name' OR 'a'='a”，那么构造的查询就会变成：
+
+
+	SELECT * FROM items
+	WHERE owner = 'wiley'
+	AND itemname = 'name' OR 'a'='a';
+
+
+附加条件 OR 'a'='a' 会使 where 从句永远评估为 true，因此该查询在逻辑上将等同于一个更为简化的查询：
+
+
+	SELECT * FROM items;
+
+
+这种查询的简化会使攻击者绕过查询只返回经过验证的用户所拥有的条目的要求；而现在的查询则会直接返回所有储存在 items 表中的条目，不论它们的所有者是谁。
+
+例 2：这个例子指出了不同的恶意数值传递给在例 1 中构造和执行的查询时所带来的各种影响。如果一个用户名为 wiley 的攻击者为 itemName 输入字符串“name'; DELETE FROM items; --”，那么构造成的查询语句将会变为两个：
+
+
+	SELECT * FROM items
+	WHERE owner = 'wiley'
+	AND itemname = 'name';
+
+	DELETE FROM items;
+
+	--'
+
+
+众多数据库服务器，其中包括 Microsoft(R) SQL Server 2000，都可以一次性执行多条用分号分隔的 SQL 指令。对于那些不允许运行用分号分隔的批量指令的数据库服务器，比如 Oracle 和其他数据库服务器，攻击者输入的这个字符串只会导致错误；但是在那些支持这种操作的数据库服务器上，攻击者可能会通过执行多条指令而在数据库上执行任意命令。
+
+注意成对的连字符 (--)；这在大多数数据库服务器上都表示下面的语句将作为注释使用，而不能加以执行 [4]。在这种情况下，注释字符的作用就是删除修改的查询指令中遗留的最后一个单引号。而在那些不允许这样加注注释的数据库中，通常攻击者可以如例 1 那样来攻击。如果攻击者输入字符串“name'); DELETE FROM items; SELECT * FROM items WHERE 'a'='a”就会创建如下三个有效指令：
+
+
+	SELECT * FROM items
+	WHERE owner = 'wiley'
+	AND itemname = 'name';
+
+	DELETE FROM items;
+
+	SELECT * FROM items WHERE 'a'='a';
+
+
+有些人认为在移动世界中，典型的 Web 应用程序漏洞（如 SQL injection）是无意义的 -- 为什么用户要攻击自己？但是，谨记移动平台的本质是从各种来源下载并在相同设备上运行的应用程序。恶意软件在银行应用程序附近运行的可能性很高，它们会强制扩展移动应用程序的攻击面（包括跨进程通信）。
+
+例 3：以下代码将例 1 改编为适用于 Android 平台。
+
+
+...
+        PasswordAuthentication pa = authenticator.getPasswordAuthentication();
+        String userName = pa.getUserName();
+        String itemName = this.getIntent().getExtras().getString("itemName");
+        String query = "SELECT * FROM items WHERE owner = '"
+				+ userName + "' AND itemname = '"
+                                + itemName + "'";
+        SQLiteDatabase db = this.openOrCreateDatabase("DB", MODE_PRIVATE, null);
+        Cursor c = db.rawQuery(query, null);
+...
+
+
+避免 SQL injection 攻击的传统方法之一是，把它作为一个输入合法性检查的问题来处理，只接受列在白名单中的字符，或者识别并避免那些列在黑名单中的恶意数据。白名单方法是一种非常有效方法，它可以强制执行严格的输入检查规则，但是参数化的 SQL 指令所需维护更少，而且能提供更好的安全保障。而对于通常采用的列黑名单方式，由于总是存在一些小漏洞，所以并不能有效地防止 SQL injection 威胁。例如，攻击者可以：
+
+— 把没有被黑名单引用的值作为目标
+
+— 寻找方法以绕过对某一转义序列元字符的需要
+
+— 使用存储过程来隐藏注入的元字符
+
+手动去除 SQL 查询中的元字符有一定的帮助，但是并不能完全保护您的应用程序免受 SQL injection 攻击。
+
+防范 SQL injection 攻击的另外一种常用方式是使用存储过程。虽然存储过程可以阻止某些类型的 SQL injection 攻击，但是对于绝大多数攻击仍无能为力。存储过程有助于避免 SQL injection 的常用方式是限制可作为参数传入的指令类型。但是，有许多方法都可以绕过这一限制，许多危险的表达式仍可以传入存储过程。所以再次强调，存储过程在某些情况下可以避免这种攻击，但是并不能完全保护您的应用系统抵御 SQL injection 的攻击。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+造成 SQL injection 攻击的根本原因在于攻击者可以改变 SQL 查询的上下文，使程序员原本要作为数据解析的数值，被篡改为命令了。当构造一个 SQL 查询时，程序员应当清楚，哪些输入的数据将会成为命令的一部分，而哪些仅仅是作为数据。参数化 SQL 指令可以防止直接窜改上下文，避免几乎所有的 SQL injection 攻击。参数化 SQL 指令是用常规的 SQL 字符串构造的，但是当需要加入用户输入的数据时，它们就需要使用捆绑参数，这些捆绑参数是一些占位符，用来存放随后插入的数据。换言之，捆绑参数可以使程序员清楚地分辨数据库中的数据，即其中有哪些输入可以看作命令的一部分，哪些输入可以看作数据。这样，当程序准备执行某个指令时，它可以详细地告知数据库，每一个捆绑参数所使用的运行时的值，而不会被解析成对该命令的修改。
+
+可以将例 1 改写成使用参数化 SQL 指令（替代用户输入连续的字符串），如下所示：
+
+
+...
+	String userName = ctx.getAuthenticatedUserName();
+	String itemName = request.getParameter("itemName");
+	String query = "SELECT * FROM items WHERE itemname=? AND owner=?";
+	PreparedStatement stmt = conn.prepareStatement(query);
+	stmt.setString(1, itemName);
+	stmt.setString(2, userName);
+	ResultSet results = stmt.execute();
+...
+
+
+下面是 Android 的等同内容：
+
+
+...
+	PasswordAuthentication pa = authenticator.getPasswordAuthentication();
+	String userName = pa.getUserName();
+	String itemName = this.getIntent().getExtras().getString("itemName");
+	String query = "SELECT * FROM items WHERE itemname=? AND owner=?";
+	SQLiteDatabase db = this.openOrCreateDatabase("DB", MODE_PRIVATE, null);
+	Cursor c = db.rawQuery(query, new Object[]{itemName, userName});
+...
+
+
+更加复杂的情况常常出现在报表生成代码中，因为这时需要通过用户输入来改变 SQL 指令的命令结构，比如在 WHERE 条件子句中加入动态的约束条件。不要因为这一需求，就无条件地接受连续的用户输入，从而创建查询语句字符串。当必须要根据用户输入来改变命令结构时，可以使用间接的方法来防止 SQL injection 攻击：创建一个合法的字符串集合，使其对应于可能要加入到 SQL 指令中的不同元素。在构造一个指令时，可使用来自用户的输入，以便从应用程序控制的值集合中进行选择。
+
+
+Tips:
+
+1. 使用参数化 SQL 指令的一个常见错误是使用由用户控制的字符串来构造 SQL 指令。这显然背离了使用参数化 SQL 指令的初衷。如果不能确定用来构造参数化指令的字符串是否由应用程序控制，请不要因为它们不会直接作为 SQL 指令执行，就假定它们是安全的。务必彻底地检查 SQL 指令中使用的所有由用户控制的字符串，确保它们不会修改查询的含意。
+
+2. 许多现代 Web 框架都提供对用户输入执行验证的机制。其中包括 Struts 和 Spring MVC。为了突出显示未经验证的输入源，HP Fortify 安全编码规则包会对 HP Fortify Static Code Analyzer（HP Fortify 静态代码分析器）报告的问题动态地重新调整优先级，具体方法是在采用框架验证机制时降低这些问题被利用的可能性并提供相应的依据。我们将这种功能称之为上下文敏感排序。为了进一步帮助 HP Fortify 用户执行审计过程，HP Fortify 软件安全研究团队开发了 Data Validation（数据验证）项目模板，该模板根据应用于输入源的验证机制按文件夹对问题进行了分组。
+
+3. Fortify RTA adds protection against this category.
+]]>
+        </recommand>
+        <references>
+            [1] SQL Injection Attacks by Example, S. J. Friedl, http://www.unixwiz.net/techtips/sql-injection.html
+
+            [2] Stop SQL Injection Attacks Before They Stop You, P. Litwin, MSDN Magazine, 2004,
+            http://msdn.microsoft.com/msdnmag/issues/04/09/SQLInjection/default.aspx
+
+            [3] SQL Injection and Oracle, Part One, P. Finnigan, Security Focus, 2002,
+            http://www.securityfocus.com/infocus/1644
+
+            [4] Writing Secure Code, Second Edition, M. Howard, D. LeBlanc, Microsoft Press, 2003
+
+            [5] IDS00-J. Prevent SQL Injection, CERT,
+            https://www.securecoding.cert.org/confluence/display/java/IDS00-J.+Prevent+SQL+Injection
+
+            [6] INJECT-2: Avoid dynamic SQL, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#3
+
+            [7] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [8] CWE ID 89, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [9] SI, Standards Mapping - FIPS200 - (FISMA)
+
+            [10] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [11] M7 Client Side Injection, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [12] A6 Injection Flaws, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [13] A2 Injection Flaws, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [14] A1 Injection, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [15] A1 Injection, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [16] Requirement 6.5.6, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [17] Requirement 6.3.1.1, Requirement 6.5.2, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [18] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [19] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [20] Insecure Interaction - CWE ID 089, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [21] Insecure Interaction - CWE ID 089, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [22] Insecure Interaction - CWE ID 089, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [23] APP3510 CAT I, APP3540.1 CAT I, APP3540.3 CAT II, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.1 - (STIG 3.1)
+
+            [24] APP3510 CAT I, APP3540.1 CAT I, APP3540.3 CAT II, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.4 - (STIG 3.4)
+
+            [25] APP3510 CAT I, APP3540.1 CAT I, APP3540.3 CAT II, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.5 - (STIG 3.5)
+
+            [26] APP3510 CAT I, APP3540.1 CAT I, APP3540.3 CAT II, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.6 - (STIG 3.6)
+
+            [27] APP3510 CAT I, APP3540.1 CAT I, APP3540.3 CAT II, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.7 - (STIG 3.7)
+
+            [28] APP3510 CAT I, APP3540.1 CAT I, APP3540.3 CAT II, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.9 - (STIG 3.9)
+
+            [29] SQL Injection, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [30] SQL Injection (WASC-19), Standards Mapping - Web Application Security Consortium Version 2.00 - (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>XML External Entity Injection</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+XML External Entities 攻击可利用能够在处理时动态构建文档的 XML 功能。XML 实体可动态包含来自给定资源的数据。外部实体允许 XML 文档包含来自外部 URI 的数据。除非另行配置，否则外部实体会迫使 XML 解析器访问由 URI 指定的资源，例如位于本地计算机或远程系统上的某个文件。这一行为会将应用程序暴露给 XML External Entity (XXE) 攻击，从而用于拒绝本地系统的服务，获取对本地计算机上文件未经授权的访问权限，扫描远程计算机，并拒绝远程系统的服务。
+
+下面的 XML 文档介绍了 XXE 攻击的示例。
+
+<?xml version="1.0" encoding="ISO-8859-1"?>
+ <!DOCTYPE foo [
+  <!ELEMENT foo ANY >
+  <!ENTITY xxe SYSTEM "file:///dev/random" >]><foo>&xxe;</foo>
+
+
+如果 XML 解析器尝试使用 /dev/random 文件中的内容来替代实体，则此示例会使服务器（使用 UNIX 系统）崩溃。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+应对 XML unmarshaller 进行安全配置，使它不允许将外部实体包含在传入的 XML 文档中。
+
+为了避免 XXE injection，请勿将直接处理 XML 源的 unmarshal 方法用作 java.io.File、java.io.Reader 或 java.io.InputStream。使用安全配置的解析器解析文档并使用将安全解析器作为 XML 源的 unmarshal 方法，如下面的示例所示：
+
+
+DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+dbf.setExpandEntityReferences(false);
+DocumentBuilder db = dbf.newDocumentBuilder();
+Document document = db.parse(<XML Source>);
+Model model = (Model) u.unmarshal(document);
+]]>
+        </recommand>
+        <references>
+            [1] XML External Entity (XXE) Processing, OWASP,
+            https://www.owasp.org/index.php?title=XML_External_Entity_(XXE)_Processing
+
+            [2] Testing for XML Injection (OWASP-DV-008), OWASP,
+            https://www.owasp.org/index.php/Testing_for_XML_Injection_(OWASP-DV-008)
+
+            [3] XML External Entities, The Web Application Security Consortium,
+            http://projects.webappsec.org/w/page/13247003/XML%20External%20Entities
+
+            [4] IDS17-J. Prevent XML External Entity Attacks, CERT,
+            https://www.securecoding.cert.org/confluence/display/java/IDS17-J.+Prevent+XML+External+Entity+Attacks
+
+            [5] DOS-1: Beware of activities that may use disproportionate resources, Oracle,
+            http://www.oracle.com/technetwork/java/seccodeguide-139067.html#1
+
+            [6] INJECT-5: Restrict XML inclusion, Oracle,
+            http://www.oracle.com/technetwork/java/seccodeguide-139067.html#3
+
+            [7] CWE ID 611, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [8] SI, Standards Mapping - FIPS200 - (FISMA)
+
+            [9] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [10] M4 Unintended Data Leakage, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [11] A6 Injection Flaws, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [12] A2 Injection Flaws, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [13] A1 Injection, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [14] A1 Injection, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [15] Requirement 6.5.6, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [16] Requirement 6.3.1.1, Requirement 6.5.2, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [17] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [18] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [19] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.1 - (STIG 3.1)
+
+            [20] APP3510 CAT I, APP3810 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.4 -
+            (STIG
+            3.4)
+
+            [21] APP3510 CAT I, APP3810 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.5 -
+            (STIG
+            3.5)
+
+            [22] APP3510 CAT I, APP3810 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.6 -
+            (STIG
+            3.6)
+
+            [23] APP3510 CAT I, APP3810 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.7 -
+            (STIG
+            3.7)
+
+            [24] APP3510 CAT I, APP3810 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.9 -
+            (STIG
+            3.9)
+
+            [25] XML External Entities (WASC-43), Standards Mapping - Web Application Security Consortium Version 2.00 -
+            (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>XPath Injection</name>
+        <grade>critical</grade>
+        <explanation>
+            <![CDATA[
+XPath injection 会在以下情况中出现：
+
+1.      数据从一个不可信赖的数据源进入程序。
+
+2.      数据用于动态构造一个 XPath 查询。
+
+例 1：下列代码可动态地构建并执行一个 XPath 查询，为指定的帐户 ID 检索电子邮件地址。由于该帐户 ID 是从 HTTP 请求中读取的，因此不可信赖。
+
+
+...
+String acctID = request.getParameter("acctID");
+String query = null;
+if(acctID != null) {
+       StringBuffer sb = new StringBuffer("/accounts/account[acctID='");
+       sb.append(acctID);
+       sb.append("']/email/text()");
+       query = sb.toString();
+}
+
+DocumentBuilderFactory domFactory = DocumentBuilderFactory.newInstance();
+domFactory.setNamespaceAware(true);
+DocumentBuilder builder = domFactory.newDocumentBuilder();
+Document doc = builder.parse("accounts.xml");
+XPathFactory factory = XPathFactory.newInstance();
+XPath xpath = factory.newXPath();
+XPathExpression expr = xpath.compile(query);
+Object result = expr.evaluate(doc, XPathConstants.NODESET);
+...
+
+
+在正常情况下（例如搜索属于帐号 1 的电子邮件地址），此代码所执行的查询如下所示：
+
+/accounts/account[acctID='1']/email/text()
+
+但是，由于这个查询是动态构造的，由一个不变的基查询字符串和一个用户输入字符串连接而成，因此只有在 acctID 不包含单引号字符时，才会正确执行这一查询。如果攻击者为 acctID 输入字符串 1' or '1' = '1，则该查询会变成：
+
+/accounts/account[acctID='1' or '1' = '1']/email/text()
+
+附加条件 1' or '1' = '1 会使 where 从句永远评估为 true，因此该查询在逻辑上将等同于一个更为简化的查询：
+
+//email/text()
+
+这种查询简化会使攻击者绕过以下要求：查询只能返回经过验证的用户所拥有的条目；现在，查询可返回文档中存储的所有电子邮件地址，不论它们的指定所有者是是谁。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+造成 XPath injection 漏洞的根本原因在于攻击者能够改变 XPath 查询的上下文，导致程序员期望解释为数据的某个数值最终被解释为命令。构建 XPath 查询后，程序员知道哪些数值应解释为命令的一部分，哪些数值应解释为数据。
+
+为了防止攻击者侵犯程序员的各种预设情况，可以使用白名单的方法，确保 XPath 查询中由用户控制的数值完全来自于预定的字符集合，不包含任何上下文中所已使用的 XPath 元字符。如果由用户控制的数值要求它包含 XPath 元字符，则使用相应的编码机制删除这些元字符在 XPath 查询中的意义。
+
+例 2
+
+...
+String acctID = request.getParameter("acctID");
+String query = null;
+if(acctID != null) {
+       Integer iAcctID = -1;
+       try {
+              iAcctID = Integer.parseInt(acctID);
+       }
+       catch (NumberFormatException e) {
+              throw new InvalidParameterException();
+       }
+       StringBuffer sb = new StringBuffer("/accounts/account[acctID='");
+       sb.append(iAcctID.toString());
+       sb.append("']/email/text()");
+       query = sb.toString();
+}
+
+DocumentBuilderFactory domFactory = DocumentBuilderFactory.newInstance();
+domFactory.setNamespaceAware(true);
+DocumentBuilder builder = domFactory.newDocumentBuilder();
+Document doc = builder.parse("accounts.xml");
+XPathFactory factory = XPathFactory.newInstance();
+XPath xpath = factory.newXPath();
+XPathExpression expr = xpath.compile(query);
+Object result = expr.evaluate(doc, XPathConstants.NODESET);
+...
+
+
+
+Tips:
+
+1. 许多现代 Web 框架都提供对用户输入执行验证的机制。其中包括 Struts 和 Spring MVC。为了突出显示未经验证的输入源，HP Fortify 安全编码规则包会对 HP Fortify Static Code Analyzer（HP Fortify 静态代码分析器）报告的问题动态地重新调整优先级，具体方法是在采用框架验证机制时降低这些问题被利用的可能性并提供相应的依据。我们将这种功能称之为上下文敏感排序。为了进一步帮助 HP Fortify 用户执行审计过程，HP Fortify 软件安全研究团队开发了 Data Validation（数据验证）项目模板，该模板根据应用于输入源的验证机制按文件夹对问题进行了分组。
+]]>
+        </recommand>
+        <references>
+            [1] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [2] CWE ID 643, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [3] SI, Standards Mapping - FIPS200 - (FISMA)
+
+            [4] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [5] M7 Client Side Injection, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [6] A6 Injection Flaws, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [7] A2 Injection Flaws, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [8] A1 Injection, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [9] A1 Injection, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [10] Requirement 6.5.6, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [11] Requirement 6.3.1.1, Requirement 6.5.2, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [12] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [13] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [14] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.1 - (STIG 3.1)
+
+            [15] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.4 - (STIG 3.4)
+
+            [16] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.5 - (STIG 3.5)
+
+            [17] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.6 - (STIG 3.6)
+
+            [18] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.7 - (STIG 3.7)
+
+            [19] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.9 - (STIG 3.9)
+
+            [20] XPath Injection, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [21] XPath Injection (WASC-39), Standards Mapping - Web Application Security Consortium Version 2.00 - (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Command Injection</name>
+        <grade>high</grade>
+        <explanation>
+            <![CDATA[
+Command Injection 漏洞主要表现为以下两种形式：
+
+－ 攻击者能够篡改程序执行的命令：攻击者直接控制了所执行的命令。
+
+－ 攻击者能够篡改命令的执行环境：攻击者间接地控制了所执行的命令。
+
+在这种情况下，我们着重关注第一种情况，即攻击者控制所执行命令的可能性。这种形式的 Command Injection 漏洞在以下情况下发生：
+
+1. 数据从不可信赖的数据源进入应用程序。
+
+
+2. 数据被用作代表应用程序所执行命令的字符串，或字符串的一部分。
+
+
+3. 通过命令的执行，应用程序会授予攻击者一种原本不该拥有的特权或能力。
+
+例 1：下面这段来自系统实用程序的代码根据系统属性 APPHOME 来决定其安装目录，然后根据指定目录的相对路径执行一个初始化脚本。
+
+
+	...
+	String home = System.getProperty("APPHOME"); 	String cmd = home + INITCMD;  	java.lang.Runtime.getRuntime().exec(cmd);
+	...
+
+
+例 1 中的代码使得攻击者可通过修改系统属性 APPHOME 而指向一个包含恶意版本 INITCMD 的其他路径，从而提高自己在应用程序中的权限，继而随心所欲地执行命令。由于程序不会验证从环境中读取的值，所以如果攻击者能够控制系统属性 APPHOME 的值，他们就能欺骗应用程序去运行恶意代码从而取得系统控制权。
+
+例 2：下面的代码来自一个管理 Web 应用程序，旨在使用户能够使用一个围绕 rman 实用程序的批处理文件封装器来启动 Oracle 数据库备份，然后运行一个 cleanup.bat 脚本来删除一些临时文件。脚本 rmanDB.bat 接受单个命令行参数，该参数指定了要执行的备份类型。由于访问数据库受限，所以应用程序执行备份需要具有较高权限的用户。
+
+
+...
+String btype = request.getParameter("backuptype");
+String cmd = new String("cmd.exe /K
+\"c:\\util\\rmanDB.bat "+btype+"&&c:\\util\\cleanup.bat\"")
+System.Runtime.getRuntime().exec(cmd);
+...
+
+
+这里的问题是：程序没有对读取自用户的 backuptype 参数做任何验证。通常情况下 Runtime.exec() 函数不会执行多条命令，但在这种情况下，程序会首先运行 cmd.exe shell，从而可以通过调用一次 Runtime.exec() 来执行多条命令。一旦调用了该 shell，它即会允许执行用两个与号分隔的多条命令。如果攻击者传递了一个形式为 "&& del c:\\dbms\\*.*" 的字符串，那么应用程序将随程序指定的其他命令一起执行此命令。由于该应用程序的特性，运行该应用程序需要具备与数据库进行交互所需的权限，这就意味着攻击者注入的任何命令都将通过这些权限得以运行。
+
+例 3： 下面的代码来自于一个 web 应用程序，该应用程序就允许用户访问一个可在系统中更新用户密码的接口。在特定的网络环境中更新密码时，其中的一个步骤就是在 /var/yp 目录中运行 make 命令，下面显示了此步骤的代码。
+
+
+...
+System.Runtime.getRuntime().exec("make");
+...
+
+
+这里的问题在于程序没有在它的构造中指定一个绝对路径，并且没能在执行 Runtime.exec() 调用前清除它的环境变量。如果攻击者能够修改 $PATH 变量，把它指向名为 make 恶意二进制代码，程序就会在其指定的环境下执行，然后加载该恶意二进制代码，而非原本期望的代码。由于应用程序自身的特性，运行该应用程序需要具备执行系统操作所需的权限，这意味着攻击者会利用这些权限执行自己的 make，从而可能导致攻击者完全控制系统。
+
+有些人认为在移动世界中，典型的漏洞（如 Command Injection）是无意义的 -- 为什么用户要攻击自己？但是，谨记移动平台的本质是从各种来源下载并在相同设备上运行的应用程序。恶意软件在银行应用程序附近运行的可能性很高，它们会强制扩展移动应用程序的攻击面（包括跨进程通信）。
+
+例 4：以下代码可从 Android Intent 中读取要执行的命令。
+
+
+...
+        String[] cmds = this.getIntent().getStringArrayExtra("commands");
+        Process p = Runtime.getRuntime().exec("su");
+        DataOutputStream os = new DataOutputStream(p.getOutputStream());
+        for (String cmd : cmds) {
+                os.writeBytes(cmd+"\n");
+        }
+        os.writeBytes("exit\n");
+        os.flush();
+...
+
+
+在经过 root 的设备上，恶意应用程序会强迫受攻击应用程序使用超级用户权限执行任意命令。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+应当禁止用户直接控制由程序执行的命令。在用户的输入会影响命令执行的情况下，应将用户输入限制为从预定的安全命令集合中进行选择。如果输入中出现了恶意的内容，传递到命令执行函数的值将默认从安全命令集合中选择，或者程序将拒绝执行任何命令。
+
+在需要将用户的输入用作程序命令中的参数时，由于合法的参数集合实在很大，或是难以跟踪，使得这个方法通常都不切实际。开发者通常的做法是使用黑名单。在输入之前，黑名单会有选择地拒绝或避免潜在的危险字符。但是，任何一个定义不安全内容的列表都很可能是不完整的，并且会严重地依赖于执行命令的环境。更好的方法是创建一份白名单，允许其中的字符出现在输入中，并且只接受完全由这些经认可的字符组成的输入。
+
+攻击者可以通过修改程序运行命令的环境来间接控制这些命令的执行。我们不应当完全信赖环境，还需采取预防措施，防止攻击者利用某些控制环境的手段进行攻击。无论何时，只要有可能，都应由应用程序来控制命令，并使用绝对路径执行命令。如果编译时尚不了解路径（如在跨平台应用程序中），应该在执行过程中利用可信赖的值构建一个绝对路径。应对照一系列定义有效值的常量，仔细地检查从配置文件或者环境中读取的命令值和路径。
+
+有时还可以执行其他检验，以检查这些来源是否已被恶意篡改。例如，如果一个配置文件为可写，程序可能会拒绝运行。如果能够预先得知有关要执行的二进制代码的信息，程序就会进行检测，以检验这个二进制代码的合法性。如果一个二进制代码始终属于某个特定的用户，或者被指定了一组特定的访问权限，这些属性就会在执行二进制代码前通过程序进行检验。
+
+尽管可能无法完全阻止强大的攻击者为了控制程序执行的命令而对系统进行的攻击，但只要程序执行外部命令，就务必使用最小授权原则：不给予超过执行该命令所必需的权限。
+
+
+Tips:
+
+1. 许多现代 Web 框架都提供对用户输入执行验证的机制。其中包括 Struts 和 Spring MVC。为了突出显示未经验证的输入源，HP Fortify 安全编码规则包会对 HP Fortify Static Code Analyzer（HP Fortify 静态代码分析器）报告的问题动态地重新调整优先级，具体方法是在采用框架验证机制时降低这些问题被利用的可能性并提供相应的依据。我们将这种功能称之为上下文敏感排序。为了进一步帮助 HP Fortify 用户执行审计过程，HP Fortify 软件安全研究团队开发了 Data Validation（数据验证）项目模板，该模板根据应用于输入源的验证机制按文件夹对问题进行了分组。
+]]>
+        </recommand>
+        <references>
+            [1] IDS07-J. Sanitize untrusted data passed to the Runtime.exec() method, CERT,
+            https://www.securecoding.cert.org/confluence/display/java/IDS07-J.+Sanitize+untrusted+data+passed+to+the+Runtime.exec%28%29+method
+
+            [2] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [3] CWE ID 77, CWE ID 78, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [4] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [5] M7 Client Side Injection, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [6] A6 Injection Flaws, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [7] A2 Injection Flaws, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [8] A1 Injection, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [9] A1 Injection, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [10] Requirement 6.5.6, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [11] Requirement 6.3.1.1, Requirement 6.5.2, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [12] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [13] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [14] Insecure Interaction - CWE ID 116, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [15] Insecure Interaction - CWE ID 078, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [16] Insecure Interaction - CWE ID 078, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [17] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.1 -
+            (STIG
+            3.1)
+
+            [18] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.4 -
+            (STIG
+            3.4)
+
+            [19] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.5 -
+            (STIG
+            3.5)
+
+            [20] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.6 -
+            (STIG
+            3.6)
+
+            [21] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.7 -
+            (STIG
+            3.7)
+
+            [22] APP3510 CAT I, APP3570 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.9 -
+            (STIG
+            3.9)
+
+            [23] OS Commanding, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [24] OS Commanding (WASC-31), Standards Mapping - Web Application Security Consortium Version 2.00 - (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>File Disclosure: J2EE</name>
+        <grade>high</grade>
+        <explanation>
+            <![CDATA[
+在以下情况下，会发生文件泄露：
+1. 数据从一个不可信赖的数据源进入程序。
+
+
+2. 数据用于动态地构造一个路径。
+
+例 1：下面的代码会接受不可信赖的数据，并使用其构造服务器端转发所使用的路径。
+
+
+...
+String returnURL = request.getParameter("returnURL");
+	RequestDispatcher rd = request.getRequestDispatcher(returnURL);
+	rd.forward();
+...
+
+
+例 2：下面的代码会接受不可信赖的数据，并使用其构造服务器端转发所使用的路径。
+
+
+...
+	<% String returnURL = request.getParameter("returnURL"); %>
+	<jsp:include page="<%=returnURL%>" />
+	...
+
+
+
+如果攻击者使用请求参数提供与某个敏感文件位置相匹配的 URL，他们将能够查看该文件。例如，使用 "http://www.yourcorp.com/webApp/logic?returnURL=WEB-INF/applicationContext.xml" 将能够查看该应用程序的 applicationContext.xml 文件。
+一旦攻击者掌握了 applicationContext.xml 的信息，他们便能够定位和下载 applicationContext.xml 中引用的其他配置文件，甚至类文件或 jar 文件。这样一来，攻击者将能够获得与应用程序有关的敏感信息，并以之为目标发动其他类型的攻击。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+请不要要使用不可信赖的数据请求服务器端资源。而应使用介于位置与路径之间的间接方法。
+请不要使用：
+
+< a href="http://www.yourcorp.com/webApp/logic?nextPage=WEB-INF/signup.jsp">New Customer
+
+而应使用：
+
+< a href="http://www.yourcorp.com/webApp/logic?nextPage=newCustomer">New Customer
+
+服务器端逻辑应具有逻辑名称与服务器端路径的映射（以逻辑名称为键），在上例中，键 "newCustomer" 中存储的路径应为 "/WEB-INF/signup.jsp"。
+]]>
+        </recommand>
+        <references>
+            [1] Two Security Vulnerabilities in the Spring Framework's MVC, Ryan Berg and Dinis Cruz, 2008,
+            http://o2platform.files.wordpress.com/2011/07/ounce_springframework_vulnerabilities.pdf
+
+            [2] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [3] CWE ID 552, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [4] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [5] M1 Weak Server Side Controls, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [6] A1 Unvalidated Input, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [7] A4 Insecure Direct Object Reference, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [8] A4 Insecure Direct Object References, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [9] A4 Insecure Direct Object References, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [10] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [11] Requirement 6.5.4, Standards Mapping - Payment Card Industry Data Security Standard Version 1.2 - (PCI
+            1.2)
+
+            [12] Requirement 6.5.8, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [13] Requirement 6.5.8, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [14] Risky Resource Management - CWE ID 073, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [15] URL Redirector Abuse (WASC-38), Standards Mapping - Web Application Security Consortium Version 2.00 -
+            (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Header Manipulation</name>
+        <grade>high</grade>
+        <explanation>
+            <![CDATA[
+以下情况中会出现 Header Manipulation 漏洞：
+
+1. 数据通过一个不可信赖的数据源进入 Web 应用程序，最常见的是 HTTP 请求。
+
+
+2. 数据包含在一个 HTTP 响应头文件里，未经验证就发送给了 Web 用户。
+
+
+如同许多软件安全漏洞一样，Header Manipulation 只是通向终端的一个途径，它本身并不是终端。从本质上看，这些漏洞是显而易见的：一个攻击者将恶意数据传送到易受攻击的应用程序，且该应用程序将数据包含在 HTTP 响应头文件中。
+
+其中最常见的一种 Header Manipulation 攻击是 HTTP Response Splitting。为了成功地实施 HTTP Response Splitting 盗取，应用程序必须允许将那些包含 CR（回车，由 %0d 或 \r 指定）和 LF（换行，由 %0a 或 \n 指定）的字符输入到头文件中。攻击者利用这些字符不仅可以控制应用程序要发送的响应剩余头文件和正文，还可以创建完全受其控制的其他响应。
+
+如今的许多现代应用程序服务器可以防止 HTTP 头文件感染恶意字符。例如，如果尝试使用被禁用的字符设置头文件，最新版本的 Apache Tomcat 会抛出 IllegalArgumentException。如果您的应用程序服务器能够防止设置带有换行符的头文件，则其具备对 HTTP Response Splitting 的防御能力。然而，单纯地过滤换行符可能无法保证应用程序不受 Cookie Manipulation 或 Open Redirects 的攻击，因此必须在设置带有用户输入的 HTTP 头文件时采取措施。
+
+示例：下列代码片段会从 HTTP 请求中读取网络日志项的作者名字 author，并将其置于一个 HTTP 响应的 cookie 头文件中。
+
+
+String author = request.getParameter(AUTHOR_PARAM);
+...
+Cookie cookie = new Cookie("author", author);
+     cookie.setMaxAge(cookieExpiration);
+     response.addCookie(cookie);
+
+
+假设在请求中提交了一个字符串，该字符串由标准的字母数字字符组成，如“Jane Smith”，那么包含该 cookie 的 HTTP 响应可能表现为以下形式：
+
+
+HTTP/1.1 200 OK
+...
+Set-Cookie: author=Jane Smith
+...
+
+
+然而，因为 cookie 值来源于未经校验的用户输入，所以仅当提交给 AUTHOR_PARAM 的值不包含任何 CR 和 LF 字符时，响应才会保留这种形式。如果攻击者提交的是一个恶意字符串，比如“Wiley Hacker\r\nHTTP/1.1 200 OK\r\n...”，那么 HTTP 响应就会被分割成以下形式的两个响应：
+
+
+HTTP/1.1 200 OK
+...
+Set-Cookie: author=Wiley Hacker
+
+HTTP/1.1 200 OK
+...
+
+
+显然，第二个响应已完全由攻击者控制，攻击者可以用所需的头文件和正文内容构建该响应。攻击者可以构建任意 HTTP 响应，从而发起多种形式的攻击，包括：cross-user defacement、网络和浏览器缓存中毒、cross-site scripting 和 page hijacking。
+
+用户信息涂改：攻击者可以向一个易受攻击的服务器发出一个请求，导致服务器创建两个响应，其中第二个响应可能会被曲解为对其他请求的响应，而这一请求很可能是与服务器共享相同 TCP 连接的另一用户发出的。这种攻击可以通过以下方式实现：攻击者诱骗用户，让他们自己提交恶意请求；或在远程情况下，攻击者与用户共享同一个连接到服务器（如共享代理服务器）的 TCP 连接。最理想的情况是，攻击者只能通过这种做法让用户相信自己的应用程序已经遭受了黑客攻击，进而对应用程序的安全性失去信心。最糟糕的情况是，攻击者可能提供经特殊技术处理的内容，这些内容旨在模仿应用程序的执行方式，但会重定向用户的私人信息（如帐号和密码），将这些信息发送给攻击者。
+
+缓存中毒： 如果多用户 Web 缓存或者单用户浏览器缓存将恶意构建的响应缓存起来，该响应的破坏力会更大。如果响应缓存在共享的 Web 缓存（如在代理服务器中常见的缓存）中，那么使用该缓存的所有用户都会不断收到恶意内容，直到清除该缓存项为止。同样，如果响应缓存在单个用户的浏览器中，那么在清除该缓存项以前，该用户会不断收到恶意内容。然而，影响仅局限于本地浏览器的用户。
+
+跨站脚本攻击：一旦攻击者控制了应用程序传送的响应，就可以选择多种恶意内容来传播给用户。Cross-Site Scripting 是最常见的攻击形式，这种攻击在响应中包含了恶意的 JavaScript 或其他代码，并在用户的浏览器中执行。基于 XSS 的攻击手段花样百出，几乎是无穷无尽的，但通常它们都会包含传输给攻击者的私人数据（如 Cookie 或者其他会话信息）。在攻击者的控制下，指引受害者进入恶意的网络内容；或者利用易受攻击的站点，对用户的机器进行其他恶意操作。对于易受攻击的应用程序用户，最常见且最危险的攻击就是使用 JavaScript 将会话和 authentication 信息返回给攻击者，而后攻击者就可以完全控制受害者的帐号了。
+
+网页劫持：除了利用一个易受攻击的应用程序向用户传输恶意内容，还可以利用相同的根漏洞，将服务器生成的供用户使用的敏感内容重定向，转而供攻击者使用。攻击者通过提交一个会导致两个响应的请求，即服务器做出的预期响应和攻击者创建的响应，致使某个中间节点（如共享的代理服务器）误导服务器所生成的响应，将本来应传送给用户的响应错误地传给攻击者。因为攻击者创建的请求产生了两个响应，第一个被解析为针对攻击者请求做出的响应，第二个则被忽略。当用户通过同一 TCP 连接发出合法请求时，攻击者的请求已经在此处等候，并被解析为针对受害者这一请求的响应。这时，攻击者将第二个请求发送给服务器，代理服务器利用针对受害者（用户）的、由该服务器产生的这一请求对服务器做出响应，因此，针对受害者的这一响应中会包含所有头文件或正文中的敏感信息。
+
+Cookie Manipulation：当与类似 Cross-Site Request Forgery 的攻击相结合时，攻击者就可以篡改、添加、甚至覆盖合法用户的 cookie。
+
+打开重定向：如果允许未验证的输入来控制重定向机制所使用的 URL，可能会有利于攻击者发动钓鱼攻击。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+针对 Header Manipulation 的解决方法是，确保在适当位置进行输入验证并检验其属性是否正确。
+
+由于 Header Manipulation 漏洞出现在应用程序的输出中包含恶意数据时，因此，合乎逻辑的做法是在应用程序输出数据前一刻对其进行验证。然而，由于 Web 应用程序常常会包含复杂而难以理解的代码，用以生成动态响应，因此，这一方法容易产生遗漏错误（遗漏验证）。降低这一风险的有效途径是对 Header Manipulation 也执行输入验证。
+
+由于 Web 应用程序必须验证输入信息以避免出现其他漏洞（如 SQL Injection），因此，一种相对简单的解决方法是扩充应用程序现有的输入验证机制，增加针对 Header Manipulation 的检查。尽管具有一定的价值，但 Header Manipulation 输入验证并不能取代严格的输出验证。应用程序可能通过共享的数据存储或其他可信赖的数据源接受输入，而该数据存储所接受的输入源可能并未执行适当的输入验证。因此，应用程序不能间接地依赖于该数据或其他任意数据的安全性。这就意味着，避免 Header Manipulation 漏洞的最佳方法是验证所有应用程序输入数据或向用户输出的数据。
+
+针对 Header Manipulation 漏洞进行验证最安全的方式是创建一份安全字符白名单，其中的字符允许出现在 HTTP 响应头文件中，并且只接受完全由这些受认可的字符组成的输入。例如，有效的用户名可能仅包含字母数字字符，帐号可能仅包含 0-9 的数字。
+
+更灵活的解决方法称为黑名单方法，但其安全性较差，这种方法在进行输入之前就有选择地拒绝或避免了潜在的危险字符。为了创建这样的列表，首先需要了解在 HTTP 响应头文件中具有特殊含义的一组字符。尽管 CR 和 LF 字符是 HTTP Response Splitting 攻击的核心，但其他字符，如“:”（冒号）和“=”（等号），在响应头文件中同样具有特殊的含义。
+
+一旦在应用程序中确定了针对 Header Manipulation 攻击执行验证的正确点，以及验证过程中要考虑的特殊字符，下一个难题就是确定在验证过程中该如何处理各种特殊字符。应用程序应拒绝任何要添加到 HTTP 响应头文件中的包含特殊字符的输入，这些特殊字符（特别是 CR 和 LF）是无效字符。
+
+许多应用程序服务器都试图避免应用程序出现 HTTP Response Splitting 漏洞，其做法是为负责设置 HTTP 头文件和 cookie 的函数提供各种执行方式，以检验是否存在进行 HTTP Response Splitting 攻击必需的字符。不要依赖运行应用程序的服务器，以此确保该应用程序的安全。开发了某个应用程序后，并不能保证在其生命周期中它会在哪些应用程序服务器中运行。由于标准和已知盗取方式的演变，我们不能保证应用程序服务器也会保持同步。
+
+
+Tips:
+
+1. 对于许多种 HttpServletRequest 实施方法来说，它们都会从 getHeader() 返回一个采用 URL 编码的字符串。只要不是首先对该字符串进行解码，就不会导致 HTTP response splitting，其原因在于 CR 和 LF 字符的编码形式不具有元意。然而，J2EE 标准并没有针对这一行为做出相关规定，并且该行为还会随着实施方法的不同而发生改变。此外，即使是 getHeader() 返回的用户输入已被编码，也会导致其他漏洞的出现，这其中包括打开重定向和其他 HTTP 头文件的篡改。
+
+2. 许多现代 Web 框架都提供对用户输入执行验证的机制。其中包括 Struts 和 Spring MVC。为了突出显示未经验证的输入源，HP Fortify 安全编码规则包会对 HP Fortify Static Code Analyzer（HP Fortify 静态代码分析器）报告的问题动态地重新调整优先级，具体方法是在采用框架验证机制时降低这些问题被利用的可能性并提供相应的依据。我们将这种功能称之为上下文敏感排序。为了进一步帮助 HP Fortify 用户执行审计过程，HP Fortify 软件安全研究团队开发了 Data Validation（数据验证）项目模板，该模板根据应用于输入源的验证机制按文件夹对问题进行了分组。
+
+3. Fortify RTA adds protection against this category.
+]]>
+        </recommand>
+        <references>
+            [1] Divide and Conquer: HTTP Response Splitting, Web Cache Poisoning Attacks, and Related Topics, A. Klein,
+            http://www.packetstormsecurity.org/papers/general/whitepaper_httpresponse.pdf
+
+            [2] HTTP Response Splitting, D. Crab, http://www.infosecwriters.com/text_resources/pdf/HTTP_Response.pdf
+
+            [3] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [4] CWE ID 113, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [5] SI, Standards Mapping - FIPS200 - (FISMA)
+
+            [6] SI-10 Information Input Validation (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4
+            - (NIST
+            SP 800-53 Rev.4)
+
+            [7] M8 Security Decisions Via Untrusted Inputs, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP
+            Mobile
+            2014)
+
+            [8] A1 Unvalidated Input, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [9] A2 Injection Flaws, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [10] A1 Injection, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [11] A1 Injection, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [12] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [13] Requirement 6.3.1.1, Requirement 6.5.2, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [14] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [15] Requirement 6.5.1, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [16] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.1 - (STIG 3.1)
+
+            [17] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.4 - (STIG 3.4)
+
+            [18] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.5 - (STIG 3.5)
+
+            [19] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.6 - (STIG 3.6)
+
+            [20] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.7 - (STIG 3.7)
+
+            [21] APP3510 CAT I, Standards Mapping - Security Technical Implementation Guide Version 3.9 - (STIG 3.9)
+
+            [22] HTTP Response Splitting, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [23] HTTP Response Splitting (WASC-25), Standards Mapping - Web Application Security Consortium Version 2.00
+            - (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Log Forging</name>
+        <grade>high</grade>
+        <explanation>
+            <![CDATA[
+在以下情况下会发生 Log Forging 的漏洞：
+
+1. 数据从一个不可信赖的数据源进入应用程序。
+
+
+2. 数据写入到应用程序或系统日志文件中。
+
+
+为了便于以后的审阅、统计数据收集或调试，应用程序通常使用日志文件来储存事件或事务的历史记录。根据应用程序自身的特性，审阅日志文件可在必要时手动执行，也可以自动执行，即利用工具自动挑选日志中的重要事件或带有某种倾向性的信息。
+
+如果攻击者可以向随后会被逐字记录到日志文件的应用程序提供数据，则可能会妨碍或误导日志文件的解读。最理想的情况是，攻击者可能通过向应用程序提供包括适当字符的输入，在日志文件中插入错误的条目。如果日志文件是自动处理的，那么攻击者可以破坏文件格式或注入意外的字符，从而使文件无法使用。更阴险的攻击可能会导致日志文件中的统计信息发生偏差。通过伪造或其他方式，受到破坏的日志文件可用于掩护攻击者的跟踪轨迹，甚至还可以牵连第三方来执行恶意行为 [1]。最糟糕的情况是，攻击者可能向日志文件注入代码或者其他命令，利用日志处理实用程序中的漏洞 [2]。
+
+例 1： 下列 Web 应用程序代码会尝试从一个请求对象中读取整数值。如果数值未被解析为整数，输入就会被记录到日志中，附带一条提示相关情况的错误消息。
+
+
+...
+	String val = request.getParameter("val");
+	try {
+  		int value = Integer.parseInt(val);
+	}
+	catch (NumberFormatException nfe) {
+  		log.info("Failed to parse val = " + val);
+	}
+...
+
+
+如果用户为“val”提交字符串“twenty-one”，则日志中会记录以下条目：
+
+
+INFO: Failed to parse val=twenty-one
+
+
+然而，如果攻击者提交字符串“twenty-one%0a%0aINFO:+User+logged+out%3dbadguy”，则日志中会记录以下条目：
+
+
+INFO: Failed to parse val=twenty-one
+
+INFO: User logged out=badguy
+
+
+显然，攻击者可以使用同样的机制插入任意日志条目。
+
+有些人认为在移动世界中，典型的 Web 应用程序漏洞（如 Log Forging）是无意义的 -- 为什么用户要攻击自己？但是，谨记移动平台的本质是从各种来源下载并在相同设备上运行的应用程序。恶意软件在银行应用程序附近运行的可能性很高，它们会强制扩展移动应用程序的攻击面（包括跨进程通信）。
+
+例 2：以下代码将例 1 改编为适用于 Android 平台。
+
+
+...
+	String val = this.getIntent().getExtras().getString("val");
+	try {
+		int value = Integer.parseInt();
+	}
+	catch (NumberFormatException nfe) {
+		Log.e(TAG, "Failed to parse val = " + val);
+        }
+...
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+使用间接方法防止 Log Forging 攻击：创建一组与不同事件一一对应的合法日志条目，这些条目必须记录在日志中，并且仅记录该组条目。要捕获动态内容（如用户注销系统），请务必使用由服务器控制的数值，而非由用户提供的数据。这就确保了日志条目中绝不会直接使用由用户提供的输入。
+
+可以按以下方式将例 1 重写为与 NumberFormatException 对应的预定义日志条目：
+
+
+...
+	public static final String NFE = "Failed to parse val. The input is required to be an integer value."
+...
+	String val = request.getParameter("val");         try {                 int value = Integer.parseInt(val);         }         catch (NumberFormatException nfe) {                 log.info(NFE);         }
+..
+
+
+下面是 Android 的等同内容：
+
+
+...
+	public static final String NFE = "Failed to parse val. The input is required to be an integer value."
+...
+        String val = this.getIntent().getExtras().getString("val");         try {                 int value = Integer.parseInt();         }         catch (NumberFormatException nfe) {                 Log.e(TAG, NFE);         }
+...
+
+
+在某些情况下，这个方法有些不切实际，因为这样一组合法的日志条目实在太大或是太复杂了。这种情况下，开发者往往又会退而采用黑名单方法。在输入之前，黑名单会有选择地拒绝或避免潜在的危险字符。然而，不安全字符列表很快就会不完善或过时。更好的方法是创建一份白名单，允许其中的字符出现在日志条目中，并且只接受完全由这些经认可的字符组成的输入。在大多数 Log Forging 攻击中，最关键的字符是“\n”（换行符），该字符决不能出现在日志条目白名单中。
+
+
+Tips:
+
+1. 许多日志功能只是为了在开发和测试过程中调试程序而创建的。根据我们的经验，当生产的某一阶段，会随机或出于某一目的进行调试。不要仅仅因为程序员说“我没有计划在生产中启动调试功能”，就容忍 Log Forging 漏洞。
+
+2. 许多现代 Web 框架都提供对用户输入执行验证的机制。其中包括 Struts 和 Spring MVC。为了突出显示未经验证的输入源，HP Fortify 安全编码规则包会对 HP Fortify Static Code Analyzer（HP Fortify 静态代码分析器）报告的问题动态地重新调整优先级，具体方法是在采用框架验证机制时降低这些问题被利用的可能性并提供相应的依据。我们将这种功能称之为上下文敏感排序。为了进一步帮助 HP Fortify 用户执行审计过程，HP Fortify 软件安全研究团队开发了 Data Validation（数据验证）项目模板，该模板根据应用于输入源的验证机制按文件夹对问题进行了分组。
+]]>
+        </recommand>
+        <references>
+            [1] The night the log was forged., A. Muffet, http://doc.novsu.ac.ru/oreilly/tcpip/puis/ch10_05.htm
+
+            [2] Exploiting Software, G. Hoglund, G. McGraw, Addison-Wesley, 2004
+
+            [3] IDS03-J. Do not log unsanitized user input, CERT,
+            https://www.securecoding.cert.org/confluence/display/java/IDS03-J.+Do+not+log+unsanitized+user+input
+
+            [4] INPUT-1: Validate inputs, Oracle, http://www.oracle.com/technetwork/java/seccodeguide-139067.html#5
+
+            [5] CWE ID 117, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [6] AU, SI, Standards Mapping - FIPS200 - (FISMA)
+
+            [7] AU-9 Protection of Audit Information (P1), Standards Mapping - NIST Special Publication 800-53 Revision
+            4 -
+            (NIST SP 800-53 Rev.4)
+
+            [8] M8 Security Decisions Via Untrusted Inputs, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP
+            Mobile
+            2014)
+
+            [9] A1 Unvalidated Input, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [10] A2 Injection Flaws, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [11] A1 Injection, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [12] A1 Injection, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [13] Requirement 6.5.1, Requirement 10.5.2, Standards Mapping - Payment Card Industry Data Security Standard
+            Version
+            1.1 - (PCI 1.1)
+
+            [14] Requirement 6.3.1.1, Requirement 6.5.2, Requirement 10.5.2, Standards Mapping - Payment Card Industry
+            Data
+            Security Standard Version 1.2 - (PCI 1.2)
+
+            [15] Requirement 6.5.1, Requirement 10.5.2, Standards Mapping - Payment Card Industry Data Security Standard
+            Version
+            2.0 - (PCI 2.0)
+
+            [16] Requirement 6.5.1, Requirement 10.5.2, Standards Mapping - Payment Card Industry Data Security Standard
+            Version
+            3.0 - (PCI 3.0)
+
+            [17] APP3510 CAT I, APP3690.2 CAT II, APP3690.4 CAT II, Standards Mapping - Security Technical
+            Implementation Guide
+            Version 3.1 - (STIG 3.1)
+
+            [18] APP3510 CAT I, APP3690.2 CAT II, APP3690.4 CAT II, Standards Mapping - Security Technical
+            Implementation Guide
+            Version 3.4 - (STIG 3.4)
+
+            [19] APP3510 CAT I, APP3690.2 CAT II, APP3690.4 CAT II, Standards Mapping - Security Technical
+            Implementation Guide
+            Version 3.5 - (STIG 3.5)
+
+            [20] APP3510 CAT I, APP3690.2 CAT II, APP3690.4 CAT II, Standards Mapping - Security Technical
+            Implementation Guide
+            Version 3.6 - (STIG 3.6)
+
+            [21] APP3510 CAT I, APP3690.2 CAT II, APP3690.4 CAT II, Standards Mapping - Security Technical
+            Implementation Guide
+            Version 3.7 - (STIG 3.7)
+
+            [22] APP3510 CAT I, APP3690.2 CAT II, APP3690.4 CAT II, Standards Mapping - Security Technical
+            Implementation Guide
+            Version 3.9 - (STIG 3.9)
+
+            [23] Improper Input Handling (WASC-20), Standards Mapping - Web Application Security Consortium Version 2.00
+            - (WASC
+            2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Password Management: Empty Password</name>
+        <grade>high</grade>
+        <explanation>
+            <![CDATA[
+为密码变量指定空字符串绝非一个好方法。如果使用 empty password 成功通过其他系统的验证，那么相应帐户的安全性很可能会被减弱，原因是其接受了 empty password。如果在为变量指定一个合法的值之前，empty password 仅仅是一个占位符，那么它将给任何不熟悉代码的人造成困惑，而且还可能导致出现意外控制流路径方面的问题。
+
+
+
+例 1： 以下代码尝试使用 empty password 连接数据库。
+
+    ...
+    DriverManager.getConnection(url, "scott", "");
+    ...
+
+
+如果例 1 中的代码成功执行，则表明数据库用户帐户“scott”配置了一个 empty password，攻击者可以轻松地猜测到这一点。更危险的是，程序一旦发布，更新帐户以使用非 empty password 时，需要对代码进行更改。
+
+例 2： 以下代码可将密码变量初始化为空字符串，并尝试在存储的值中读取密码，且将其与用户提供的值进行比较。
+
+
+    ...
+    String storedPassword = "";
+    String temp;
+
+    if ((temp = readPassword()) != null) {
+        storedPassword = temp;
+    }
+
+    if(storedPassword.equals(userPassword))
+        // Access protected resources
+        ...
+    }
+    ...
+
+
+如果 readPassword() 因数据库错误或其他问题而未能取得存储的密码，攻击者只需向 userPassword 提供一个空字符串，就能轻松绕过密码检查。
+
+在移动世界中，由于设备丢失的几率较高，因此密码管理是一个非常棘手的问题。
+例 3：以下代码可将用户名和密码变量初始化为空字符串，如果服务器之前未拒绝这些变量当前提出的请求，代码就可从 Android WebView 存储读取凭证，并使用用户名和密码设置身份验证，从而查看受保护页面。
+
+...
+webview.setWebViewClient(new WebViewClient() {
+  public void onReceivedHttpAuthRequest(WebView view,
+        HttpAuthHandler handler, String host, String realm) {
+    String username = "";
+    String password = "";
+
+    if (handler.useHttpAuthUsernamePassword()) {
+      String[] credentials = view.getHttpAuthUsernamePassword(host, realm);
+      username = credentials[0];
+      password = credentials[1];
+    }
+    handler.proceed(username, password);
+  }
+});
+...
+
+
+与例 2 相似，如果 useHttpAuthUsernamePassword() 返回 false，攻击者就可以通过提供 empty password 查看受保护页面。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+始终从加密的外部资源读取存储的密码值，并为密码变量指定有意义的值。确保始终不使用 empty password 或 null password 保护敏感资源。
+
+对于 Android 以及其他任何使用 SQLite 数据库的平台来说，SQLCipher 是一个好选择 -- 对 SQLite 数据库的扩展为数据库文件提供了透明的 256 位 AES 加密。因此，凭证可以存储在加密的数据库中。
+
+例 4：以下代码演示了在将所需的二进制码和存储凭证下载到数据库文件后，将 SQLCipher 集成到 Android 应用程序中的方法。
+
+import net.sqlcipher.database.SQLiteDatabase;
+...
+  SQLiteDatabase.loadLibs(this);
+  File dbFile = getDatabasePath("credentials.db");
+  dbFile.mkdirs();
+  dbFile.delete();
+  SQLiteDatabase db = SQLiteDatabase.openOrCreateDatabase(dbFile, "credentials", null);
+  db.execSQL("create table credentials(u, p)");
+  db.execSQL("insert into credentials(u, p) values(?, ?)", new Object[]{username, password});
+...
+
+
+请注意，对 android.database.sqlite.SQLiteDatabase 的引用可以使用 net.sqlcipher.database.SQLiteDatabase 代替。
+
+要在 WebView 存储上启用加密，需要使用 sqlcipher.so 库重新编译 WebKit。
+
+
+Tips:
+
+1. 可使用 Fortify Java Annotations、FortifyPassword 和 FortifyNotPassword 来指示哪些字段和变量代表密码。
+
+2. 识别 null password、empty password 和 hardcoded password 时，默认规则只会考虑包含 password 字符的字段和变量。但是，使用 Custom Rules Editor（自定义规则编辑器）提供的 Password Management（密码管理）向导即可轻松创建能够从自定义字段和变量中检测出密码管理问题的规则。
+]]>
+        </recommand>
+        <references>
+            [1] SQLCipher., http://sqlcipher.net/
+
+            [2] CWE ID 259, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [3] IA, Standards Mapping - FIPS200 - (FISMA)
+
+            [4] SC-28 Protection of Information at Rest (P1), Standards Mapping - NIST Special Publication 800-53
+            Revision 4 -
+            (NIST SP 800-53 Rev.4)
+
+            [5] M2 Insecure Data Storage, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [6] A8 Insecure Storage, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [7] A8 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [8] A7 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [9] A6 Sensitive Data Exposure, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [10] Requirement 3.4, Requirement 6.5.8, Requirement 8.4, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 1.1 - (PCI 1.1)
+
+            [11] Requirement 3.4, Requirement 6.3.1.3, Requirement 6.5.8, Requirement 8.4, Standards Mapping - Payment
+            Card
+            Industry Data Security Standard Version 1.2 - (PCI 1.2)
+
+            [12] Requirement 3.4, Requirement 6.5.3, Requirement 8.4, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 2.0 - (PCI 2.0)
+
+            [13] Requirement 3.4, Requirement 6.5.3, Requirement 8.2.1, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 3.0 - (PCI 3.0)
+
+            [14] Porous Defenses - CWE ID 259, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [15] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.1 - (STIG 3.1)
+
+            [16] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.4 - (STIG 3.4)
+
+            [17] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.5 - (STIG 3.5)
+
+            [18] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.6 - (STIG 3.6)
+
+            [19] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.7 - (STIG 3.7)
+
+            [20] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.9 - (STIG 3.9)
+
+            [21] Insufficient Authentication, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24
+            + 2)
+
+            [22] Insufficient Authentication (WASC-01), Standards Mapping - Web Application Security Consortium Version
+            2.00 -
+            (WASC 2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Password Management: Hardcoded Password</name>
+        <grade>high</grade>
+        <explanation>
+            <![CDATA[
+使用硬编码方式处理密码绝非好方法。这不仅是因为所有项目开发人员都可以使用通过硬编码方式处理的密码，而且还会使解决这一问题变得极其困难。一旦代码投入使用，除非对软件进行修补，否则您再也不能改变密码了。如果帐户中的密码保护减弱，系统所有者将被迫在安全性和可行性之间做出选择。
+
+
+例 1：以下代码用 hardcoded password 来连接数据库：
+
+
+...
+DriverManager.getConnection(url, "scott", "tiger");
+...
+
+
+该代码可以正常运行，但是任何有该代码权限的人都能得到这个密码。一旦程序发布，将无法变更数据库用户“scott”和密码“tiger”，除非是要修补该程序。心怀不轨的雇员可以利用手中掌握的信息访问权限入侵系统。更糟的是，如果攻击者能够访问应用程序的字节代码，那么他们就可以利用 javap -c 命令访问已经过反汇编的代码，而在这些代码中恰恰包含着用户使用过的密码值。我们可以从以下看到上述例子的执行结果：
+
+
+javap -c ConnMngr.class
+
+22: ldc   #36; //String jdbc:mysql://ixne.com/rxsql
+24: ldc   #38; //String scott
+26: ldc   #17; //String tiger
+
+
+在移动世界中，由于设备丢失的几率较高，因此密码管理是一个非常棘手的问题。
+例 2：以下代码可使用硬编码的用户名和密码设置身份验证，从而使用 Android WebView 查看受保护页面。
+
+...
+webview.setWebViewClient(new WebViewClient() {
+  public void onReceivedHttpAuthRequest(WebView view,
+        HttpAuthHandler handler, String host, String realm) {
+    handler.proceed("guest", "allow");
+  }
+});
+...
+
+
+与例 1 相似，该代码可以正常运行，但是任何有该代码权限的人都能得到这个密码。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+绝不能对密码进行硬编码。通常情况下，应对密码加以模糊化，并在外部资源文件中进行管理。在系统中采用明文的形式存储密码，会造成任何有充分权限的人读取和无意中误用密码。至少，密码要先经过 hash 处理再存储。
+
+有些第三方产品宣称可以采用更加安全的方式管理密码。例如，WebSphere Application Server 4.x 用简单的异或加密算法加密数值，但是请不要对诸如此类的加密方式给予完全的信任。WebSphere 以及其他一些应用服务器通常都只提供过期的且相对较弱的加密机制，这对于安全性敏感的环境来说是远远不够的。一般较为安全的解决方法是采用由用户创建的所有者机制，而这似乎也是目前最好的方法。
+
+对于 Android 以及其他任何使用 SQLite 数据库的平台来说，SQLCipher 是一个好选择 -- 对 SQLite 数据库的扩展为数据库文件提供了透明的 256 位 AES 加密。因此，凭证可以存储在加密的数据库中。
+
+例 3：以下代码演示了在将所需的二进制码和存储凭证下载到数据库文件后，将 SQLCipher 集成到 Android 应用程序中的方法。
+
+import net.sqlcipher.database.SQLiteDatabase;
+...
+  SQLiteDatabase.loadLibs(this);   File dbFile = getDatabasePath("credentials.db");   dbFile.mkdirs();   dbFile.delete();   SQLiteDatabase db = SQLiteDatabase.openOrCreateDatabase(dbFile, "credentials", null);   db.execSQL("create table credentials(u, p)");   db.execSQL("insert into credentials(u, p) values(?, ?)", new Object[]{username, password});
+...
+
+
+请注意，对 android.database.sqlite.SQLiteDatabase 的引用可以使用 net.sqlcipher.database.SQLiteDatabase 代替。
+
+要在 WebView 存储上启用加密，需要使用 sqlcipher.so 库重新编译 WebKit。
+
+
+Tips:
+
+1. 可使用 Fortify Java Annotations、FortifyPassword 和 FortifyNotPassword 来指示哪些字段和变量代表密码。
+
+2. 识别 null password、empty password 和 hardcoded password 时，默认规则只会考虑包含 password 字符的字段和变量。但是，使用 Custom Rules Editor（自定义规则编辑器）提供的 Password Management（密码管理）向导即可轻松创建能够从自定义字段和变量中检测出密码管理问题的规则。
+]]>
+        </recommand>
+        <references>
+            [1] SQLCipher., http://sqlcipher.net/
+
+            [2] MSC03-J. Never hard code sensitive information, CERT,
+            https://www.securecoding.cert.org/confluence/display/java/MSC03-J.+Never+hard+code+sensitive+information
+
+            [3] CWE ID 259, CWE ID 798, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [4] IA, Standards Mapping - FIPS200 - (FISMA)
+
+            [5] SC-28 Protection of Information at Rest (P1), Standards Mapping - NIST Special Publication 800-53
+            Revision 4 -
+            (NIST SP 800-53 Rev.4)
+
+            [6] M2 Insecure Data Storage, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [7] A8 Insecure Storage, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [8] A8 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [9] A7 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [10] A6 Sensitive Data Exposure, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [11] Requirement 3.4, Requirement 6.5.8, Requirement 8.4, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 1.1 - (PCI 1.1)
+
+            [12] Requirement 3.4, Requirement 6.3.1.3, Requirement 6.5.8, Requirement 8.4, Standards Mapping - Payment
+            Card
+            Industry Data Security Standard Version 1.2 - (PCI 1.2)
+
+            [13] Requirement 3.4, Requirement 6.5.3, Requirement 8.4, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 2.0 - (PCI 2.0)
+
+            [14] Requirement 3.4, Requirement 6.5.3, Requirement 8.2.1, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 3.0 - (PCI 3.0)
+
+            [15] Porous Defenses - CWE ID 259, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [16] Porous Defenses - CWE ID 798, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [17] Porous Defenses - CWE ID 798, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [18] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.1 - (STIG 3.1)
+
+            [19] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.4 - (STIG 3.4)
+
+            [20] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.5 - (STIG 3.5)
+
+            [21] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.6 - (STIG 3.6)
+
+            [22] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.7 - (STIG 3.7)
+
+            [23] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.9 - (STIG 3.9)
+
+            [24] Insufficient Authentication, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24
+            + 2)
+
+            [25] Insufficient Authentication (WASC-01), Standards Mapping - Web Application Security Consortium Version
+            2.00 -
+            (WASC 2.00)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Password Management: Password in Configuration File</name>
+        <grade>high</grade>
+        <explanation>
+            <![CDATA[
+在配置文件中存储明文密码会使所有能够访问该文件的人都能访问那些用密码保护的资源。程序员有时候认为，他们不可能阻止应用程序被那些能够访问配置文件的攻击者入侵，但是这种想法会导致攻击者发动攻击变得更加容易。健全的 password management 方针从来不会允许以明文形式存储密码。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+绝不能采用明文的形式存储密码。相反，应在系统启动时，由管理员输入密码。如果这种方法不切实际，一个安全性较差、但通常都比较恰当的解决办法是将密码模糊化，并把这些去模糊化的资源分散到系统各处，因此，要破译密码，攻击者就必须取得并正确合并多个系统资源。
+
+有些第三方产品宣称可以采用更加安全的方式管理密码。例如，WebSphere Application Server 4.x 用简单的异或加密算法加密数值，但是请不要对诸如此类的加密方式给予完全的信任。WebSphere 以及其他一些应用服务器通常都只提供过期的且相对较弱的加密机制，这对于安全性敏感的环境来说是远远不够的。较为安全的解决方法是由用户自己创建一个新机制，而这也是如今唯一可行的方法。
+
+
+Tips:
+
+1. HP Fortify Static Code Analyzer（HP Fortify 静态代码分析器）会从配置文件中搜索那些用于密码属性的常用名称。当发现密码条目中包含明文时，就会将其标记为问题。
+
+2. 如果配置文件中包含一个默认密码条目，除了需要在配置文件中将其模糊化以外，还需要对其进行修改。
+]]>
+        </recommand>
+        <references>
+            [1] CWE ID 13, CWE ID 260, CWE ID 555, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [2] IA, Standards Mapping - FIPS200 - (FISMA)
+
+            [3] SC-28 Protection of Information at Rest (P1), Standards Mapping - NIST Special Publication 800-53
+            Revision 4 -
+            (NIST SP 800-53 Rev.4)
+
+            [4] M2 Insecure Data Storage, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [5] A8 Insecure Storage, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [6] A8 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [7] A7 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [8] A6 Sensitive Data Exposure, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [9] Requirement 3.4, Requirement 6.5.8, Requirement 8.4, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 1.1 - (PCI 1.1)
+
+            [10] Requirement 3.4, Requirement 6.3.1.3, Requirement 6.5.8, Requirement 8.4, Standards Mapping - Payment
+            Card
+            Industry Data Security Standard Version 1.2 - (PCI 1.2)
+
+            [11] Requirement 3.4, Requirement 6.5.3, Requirement 8.4, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 2.0 - (PCI 2.0)
+
+            [12] Requirement 3.4, Requirement 6.5.3, Requirement 8.2.1, Standards Mapping - Payment Card Industry Data
+            Security
+            Standard Version 3.0 - (PCI 3.0)
+
+            [13] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.1 - (STIG 3.1)
+
+            [14] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.4 - (STIG 3.4)
+
+            [15] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.5 - (STIG 3.5)
+
+            [16] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.6 - (STIG 3.6)
+
+            [17] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.7 - (STIG 3.7)
+
+            [18] APP3210.1 CAT II, APP3340 CAT I, APP3350 CAT I, Standards Mapping - Security Technical Implementation
+            Guide
+            Version 3.9 - (STIG 3.9)
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Race Condition: Singleton Member Field</name>
+        <grade>high</grade>
+        <explanation>
+            <![CDATA[
+许多 Servlet 开发人员都不了解 Servlet 为单例模式。Servlet 只有一个实例，并通过使用和重复使用该单个实例来处理需要由不同线程同时处理的多个请求。
+
+这种误解的共同后果是，开发者使用 Servlet 成员字段的这种方式会导致某个用户可能在无意中看到其他用户的数据。换言之，即把用户数据存储在 Servlet 成员字段中会引发数据访问的 race condition。
+
+例 1：以下 Servlet 把请求参数值存储在成员字段中，然后将参数值返回给响应输出流。
+
+
+public class GuestBook extends HttpServlet {
+
+   String name;
+
+   protected void doPost (HttpServletRequest req,
+                       HttpServletResponse res) {
+     name = req.getParameter("name");
+     ...
+     out.println(name + ", thanks for visiting!");
+   }
+}
+
+
+当该代码在单一用户环境中正常运行时，如果有两个用户几乎同时访问 Servlet，可能会导致这两个请求以如下方式处理线程的插入：
+
+	线程 1：	将“Dick”分配给 name
+	线程 2：	将“Jane”分配给 name
+	线程 1：	print“Jane, thanks for visiting!”
+	线程 2：	print“Jane, thanks for visiting!”
+
+因此会向第一个用户显示第二个用户的用户名。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+不要为任何参数（常量除外）使用 Servlet 成员字段。（例如，确保所有成员字段都是 static final）。
+
+当开发者需要把代码内某一部分中的数据传输到另一部分时，他们经常使用 Servlet 成员字段存储用户数据。如果您也是这么做的，可以考虑声明一个单独的类，并仅使用 Servlet“封装”这个新类。
+
+例 2：上述例子中的 bug 可以利用以下方式进行修正：
+
+
+public class GuestBook extends HttpServlet {
+
+   protected void doPost (HttpServletRequest req,
+                       HttpServletResponse res) {
+	GBRequestHandler handler = new GBRequestHandler();
+	handler.handle(req, res);
+   }
+}
+
+public class GBRequestHandler {
+
+   String name;
+
+   public void handle(HttpServletRequest req,
+                       HttpServletResponse res) {
+     name = req.getParameter("name");
+     ...
+     out.println(name + ", thanks for visiting!");
+   }
+
+}
+
+
+此外，Servlet 也可以利用同步代码块来访问 servlet 实例变量。但是，使用同步代码块可能会导致严重的性能问题。
+]]>
+        </recommand>
+        <references>
+            [1] The Java Servlet Specification, Sun Microsystems, http://java.sun.com/products/servlet/download.html
+
+            [2] CWE ID 362, CWE ID 488, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [3] SC-4 Information in Shared Resources (P1), Standards Mapping - NIST Special Publication 800-53 Revision
+            4 -
+            (NIST SP 800-53 Rev.4)
+
+            [4] A6 Information Leakage and Improper Error Handling, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [5] Requirement 6.5.6, Standards Mapping - Payment Card Industry Data Security Standard Version 1.2 - (PCI
+            1.2)
+
+            [6] Requirement 6.5.5, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [7] Requirement 6.5.6, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [8] Insecure Interaction - CWE ID 362, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [9] Insecure Interaction - CWE ID 362, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [10] APP3630.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.1 - (STIG 3.1)
+
+            [11] APP3630.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.4 - (STIG 3.4)
+
+            [12] APP3630.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.5 - (STIG 3.5)
+
+            [13] APP3630.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.6 - (STIG 3.6)
+
+            [14] APP3630.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.7 - (STIG 3.7)
+
+            [15] APP3630.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.9 - (STIG 3.9)
+
+            [16] Information Leakage, Standards Mapping - Web Application Security Consortium 24 + 2 - (WASC 24 + 2)
+
+            [17] Information Leakage (WASC-13), Standards Mapping - Web Application Security Consortium Version 2.00 -
+            (WASC
+            2.00)
+
+        </references>
+    </pattern>
+
+
+    <pattern>
+        <name>Weak Encryption</name>
+        <grade>high</grade>
+        <explanation>
+            <![CDATA[
+陈旧的加密算法（如 DES）再也不能为敏感数据提供足够的保护了。加密算法依赖于密钥大小，这是确保加密强度的主要方法之一。加密强度通常通过生成有效密钥所需的时间和计算能力来衡量。计算能力的提高使得能够在合理的时间内获得较小的加密密钥。例如，在二十世纪七十年代首次开发出该算法时，在 DES 中使用的 56 位密钥造成了巨大的计算障碍，但今天，使用常用设备能在不到一天的时间内破解 DES。
+]]>
+        </explanation>
+        <demo></demo>
+        <recommand>
+            <![CDATA[
+使用密钥较大的强加密算法来保护敏感数据。作为 DES 的备选强加密算法的示例包括 Rijndael（高级加密标准，简称 AES）和 Triple DES (3DES)。在选择一种算法之前，应首先确定您的组织是否对某个特定算法和实施实现了标准化。
+
+
+Tips:
+
+1. 使用 RC4 或 DES 算法时，HP Fortify 安全编码规则包会报告严重程度较高的警告。
+
+2. 使用 RC2 算法时，该规则包会报告严重程度较低的警告。
+]]>
+        </recommand>
+        <references>
+            [1] Java Cryptography Architecture Standard Algorithm Name Documentation, Sun Microsystems,
+            http://java.sun.com/javase/6/docs/technotes/guides/security/StandardNames.html
+
+            [2] DES, distributed.net, http://www.distributed.net/des/
+
+            [3] FAQ About the Electronic Frontier Foundation's "DES Cracker" Machine, Electronic Frontier Foundation,
+            http://w2.eff.org/Privacy/Crypto/Crypto_misc/DESCracker/HTML/19980716_eff_des_faq.html
+
+            [4] SDL Development Practices, Microsoft,
+            http://download.microsoft.com/download/8/4/7/8471a3cb-e4bf-442a-bba4-c0c907d598c5/Michael%20Howard%20SDL%20Development%20Practices.ppsx
+
+            [5] Microsoft Security Fundamentals, Microsoft, http://eusecwest.com/esw06/esw06-cushman.ppt
+
+            [6] NIST Special Publication 800-132, NIST,
+            http://csrc.nist.gov/publications/nistpubs/800-132/nist-sp800-132.pdf
+
+            [7] Related-key cryptanalysis of 3-WAY, Biham-DES, CAST, DES-X, NewDES, RC2, and TEA, John Kelsey, Bruce
+            Schneier,
+            and David Wagner
+
+            [8] CWE ID 327, Standards Mapping - Common Weakness Enumeration - (CWE)
+
+            [9] MP, Standards Mapping - FIPS200 - (FISMA)
+
+            [10] SC-13 Cryptographic Protection (P1), Standards Mapping - NIST Special Publication 800-53 Revision 4 -
+            (NIST SP
+            800-53 Rev.4)
+
+            [11] M6 Broken Cryptography, Standards Mapping - OWASP Mobile Top 10 Risks 2014 - (OWASP Mobile 2014)
+
+            [12] A8 Insecure Storage, Standards Mapping - OWASP Top 10 2004 - (OWASP 2004)
+
+            [13] A8 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2007 - (OWASP 2007)
+
+            [14] A7 Insecure Cryptographic Storage, Standards Mapping - OWASP Top 10 2010 - (OWASP 2010)
+
+            [15] A6 Sensitive Data Exposure, Standards Mapping - OWASP Top 10 2013 - (OWASP 2013)
+
+            [16] Requirement 6.5.8, Standards Mapping - Payment Card Industry Data Security Standard Version 1.1 - (PCI
+            1.1)
+
+            [17] Requirement 6.3.1.3, Requirement 6.5.8, Standards Mapping - Payment Card Industry Data Security
+            Standard
+            Version 1.2 - (PCI 1.2)
+
+            [18] Requirement 6.5.3, Standards Mapping - Payment Card Industry Data Security Standard Version 2.0 - (PCI
+            2.0)
+
+            [19] Requirement 6.5.3, Standards Mapping - Payment Card Industry Data Security Standard Version 3.0 - (PCI
+            3.0)
+
+            [20] Porous Defenses - CWE ID 327, Standards Mapping - SANS Top 25 2009 - (SANS 2009)
+
+            [21] Porous Defenses - CWE ID 327, Standards Mapping - SANS Top 25 2010 - (SANS 2010)
+
+            [22] Porous Defenses - CWE ID 327, Standards Mapping - SANS Top 25 2011 - (SANS Top 25 2011)
+
+            [23] APP3150.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.1 - (STIG 3.1)
+
+            [24] APP3150.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.4 - (STIG 3.4)
+
+            [25] APP3150.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.5 - (STIG 3.5)
+
+            [26] APP3150.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.6 - (STIG 3.6)
+
+            [27] APP3150.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.7 - (STIG 3.7)
+
+            [28] APP3150.1 CAT II, Standards Mapping - Security Technical Implementation Guide Version 3.9 - (STIG 3.9)
+        </references>
+    </pattern>
+</database>
