@@ -10,8 +10,13 @@ import javax.swing.event.DocumentListener;
 import javax.swing.text.Document;
 import javax.swing.text.JTextComponent;
 import javax.swing.text.html.HTMLEditorKit;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.ItemEvent;
+import java.awt.event.KeyEvent;
 import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 /**
  * Created by Sumy on 2015/11/26 0026.
@@ -19,6 +24,8 @@ import java.io.File;
 public class MainForm {
     public static String[] DATABASETYPE = {"JAVA", "JAVAWEB", "ANDROID", "DEFAULT"};
     public static String[] LEVELTYPE = {"LOW", "MIDDLE", "HIGH", "UNKNOWN"};
+
+    private static SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     private JPanel mainPanel;
     private JButton btn_loadDatabase;
@@ -67,12 +74,14 @@ public class MainForm {
         this.outerFrame = outerFrame;
 
         init();
+        configKeyStroke();
         initReviewPanel();
         initListener();
         disableAll();
         refreshleft();
         btn_saveDatabase.addActionListener(e -> {
             DatabaseController.saveDatabase();
+            showStateBar("已保存。");
         });
         btn_newDatabase.addActionListener(e -> {
             fileChooser.setDialogTitle("选择数据库保存位置");
@@ -259,7 +268,7 @@ public class MainForm {
         fileChooser.addChoosableFileFilter(filter);
 
         splitPane.setOneTouchExpandable(true);
-        splitPane.setDividerSize (10);
+        splitPane.setDividerSize(10);
         splitPane.setDividerLocation(-100);
 
         DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
@@ -286,6 +295,62 @@ public class MainForm {
                 }
             }
         });
+    }
+
+    private void configKeyStroke() {
+        KeyStroke likeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
+        KeyStroke olkeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
+        KeyStroke ulkeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
+        KeyStroke pkeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_P, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
+        KeyStroke prekeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
+        KeyStroke bkeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_B, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
+        KeyStroke ikeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_I, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
+
+        editor_description.getInputMap().put(likeystroke, "likeystroke");
+        editor_description.getActionMap().put("likeystroke", KeyStrokeActionFactory.getAction("li", editor_description));
+        editor_description.getInputMap().put(ulkeystroke, "ulkeystroke");
+        editor_description.getActionMap().put("ulkeystroke", KeyStrokeActionFactory.getAction("ul", editor_description));
+        editor_description.getInputMap().put(olkeystroke, "olkeystroke");
+        editor_description.getActionMap().put("olkeystroke", KeyStrokeActionFactory.getAction("ol", editor_description));
+        editor_description.getInputMap().put(pkeystroke, "pkeystroke");
+        editor_description.getActionMap().put("pkeystroke", KeyStrokeActionFactory.getAction("p", editor_description));
+        editor_description.getInputMap().put(prekeystroke, "prekeystroke");
+        editor_description.getActionMap().put("prekeystroke", KeyStrokeActionFactory.getAction("pre", editor_description));
+        editor_description.getInputMap().put(ikeystroke, "ikeystroke");
+        editor_description.getActionMap().put("ikeystroke", KeyStrokeActionFactory.getAction("i", editor_description));
+        editor_description.getInputMap().put(bkeystroke, "bkeystroke");
+        editor_description.getActionMap().put("bkeystroke", KeyStrokeActionFactory.getAction("b", editor_description));
+
+        editor_recommand.getInputMap().put(likeystroke, "likeystroke");
+        editor_recommand.getActionMap().put("likeystroke", KeyStrokeActionFactory.getAction("li", editor_recommand));
+        editor_recommand.getInputMap().put(ulkeystroke, "ulkeystroke");
+        editor_recommand.getActionMap().put("ulkeystroke", KeyStrokeActionFactory.getAction("ul", editor_recommand));
+        editor_recommand.getInputMap().put(olkeystroke, "olkeystroke");
+        editor_recommand.getActionMap().put("olkeystroke", KeyStrokeActionFactory.getAction("ol", editor_recommand));
+        editor_recommand.getInputMap().put(pkeystroke, "pkeystroke");
+        editor_recommand.getActionMap().put("pkeystroke", KeyStrokeActionFactory.getAction("p", editor_recommand));
+        editor_recommand.getInputMap().put(prekeystroke, "prekeystroke");
+        editor_recommand.getActionMap().put("prekeystroke", KeyStrokeActionFactory.getAction("pre", editor_recommand));
+        editor_recommand.getInputMap().put(ikeystroke, "ikeystroke");
+        editor_recommand.getActionMap().put("ikeystroke", KeyStrokeActionFactory.getAction("i", editor_recommand));
+        editor_recommand.getInputMap().put(bkeystroke, "bkeystroke");
+        editor_recommand.getActionMap().put("bkeystroke", KeyStrokeActionFactory.getAction("b", editor_recommand));
+
+        editor_reference.getInputMap().put(likeystroke, "likeystroke");
+        editor_reference.getActionMap().put("likeystroke", KeyStrokeActionFactory.getAction("li", editor_reference));
+        editor_reference.getInputMap().put(ulkeystroke, "ulkeystroke");
+        editor_reference.getActionMap().put("ulkeystroke", KeyStrokeActionFactory.getAction("ul", editor_reference));
+        editor_reference.getInputMap().put(olkeystroke, "olkeystroke");
+        editor_reference.getActionMap().put("olkeystroke", KeyStrokeActionFactory.getAction("ol", editor_reference));
+        editor_reference.getInputMap().put(pkeystroke, "pkeystroke");
+        editor_reference.getActionMap().put("pkeystroke", KeyStrokeActionFactory.getAction("p", editor_reference));
+        editor_reference.getInputMap().put(prekeystroke, "prekeystroke");
+        editor_reference.getActionMap().put("prekeystroke", KeyStrokeActionFactory.getAction("pre", editor_reference));
+        editor_reference.getInputMap().put(ikeystroke, "ikeystroke");
+        editor_reference.getActionMap().put("ikeystroke", KeyStrokeActionFactory.getAction("i", editor_reference));
+        editor_reference.getInputMap().put(bkeystroke, "bkeystroke");
+        editor_reference.getActionMap().put("bkeystroke", KeyStrokeActionFactory.getAction("b", editor_reference));
+
     }
 
     private void initReviewPanel() {
@@ -324,7 +389,7 @@ public class MainForm {
 
 
     private void showStateBar(String text) {
-        lab_stateBar.setText(text);
+        lab_stateBar.setText(df.format(new Date()) + text);
     }
 
     private String getReviewHtmlText(WikiItem item) {
