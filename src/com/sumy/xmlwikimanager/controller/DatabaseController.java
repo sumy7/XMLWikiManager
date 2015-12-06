@@ -2,6 +2,7 @@ package com.sumy.xmlwikimanager.controller;
 
 import com.sumy.xmlwikimanager.bean.WikiItem;
 import com.sumy.xmlwikimanager.dao.XMLDatabase;
+import org.xml.sax.SAXException;
 
 import java.util.Collection;
 
@@ -73,7 +74,7 @@ public class DatabaseController {
         database.news(databasePath);
     }
 
-    public static void openDatabase(String databasePath) {
+    public static void openDatabase(String databasePath) throws SAXException{
         XMLDatabase database = XMLDatabase.getInstance();
         database.open(databasePath);
     }

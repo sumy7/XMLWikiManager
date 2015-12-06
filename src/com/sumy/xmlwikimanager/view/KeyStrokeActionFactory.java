@@ -29,6 +29,9 @@ public class KeyStrokeActionFactory {
         if ("pre".equals(actionName)) {
             return new PreStrokeAction(editor);
         }
+        if ("br".equals(actionName)) {
+            return new BrStrokeAction(editor);
+        }
         throw new IllegalArgumentException("unknown action name: " + actionName);
     }
 }
@@ -135,5 +138,18 @@ class IStrokeAction extends AbstractAction {
         String selecttext = editor.getSelectedText();
         String newtext = "<i>" + (selecttext == null ? "" : selecttext) + "</i>";
         editor.replaceSelection(newtext);
+    }
+}
+
+class BrStrokeAction extends AbstractAction {
+    private JEditorPane editor;
+
+    public BrStrokeAction(JEditorPane editor) {
+        this.editor = editor;
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        editor.replaceSelection("<br />");
     }
 }

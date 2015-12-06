@@ -90,7 +90,7 @@ public class XMLDatabase extends AbstractListModel<WikiItem> {
         return result;
     }
 
-    public boolean open(String databasePath) {
+    public boolean open(String databasePath) throws SAXException {
         xmlPath = databasePath;
         isOffline = false;
         File file = new File(databasePath);
@@ -107,7 +107,7 @@ public class XMLDatabase extends AbstractListModel<WikiItem> {
             return false;
         } catch (SAXException e) {
             e.printStackTrace();
-            return false;
+            throw e;
         } catch (ParserConfigurationException e) {
             e.printStackTrace();
             return false;

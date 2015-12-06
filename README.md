@@ -14,6 +14,7 @@ XMLWikiManager
     + `Ctrl+Shift+C`   用`<pre></pre>`包裹选中文本
     + `Ctrl+Shift+B`   用`<b></b>`包裹选中文本
     + `Ctrl+Shift+U`   用`<u></u>`包裹选中文本
+    + `Ctrl+Shift+R`   添加`<br />`标签
 4. 敬请期待
 
 许可证 GPL

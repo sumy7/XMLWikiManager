@@ -3,6 +3,7 @@ package com.sumy.xmlwikimanager.view;
 import com.sumy.xmlwikimanager.bean.WikiItem;
 import com.sumy.xmlwikimanager.controller.DatabaseController;
 import com.sumy.xmlwikimanager.dao.XMLDatabase;
+import org.xml.sax.SAXParseException;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -107,34 +108,38 @@ public class MainForm {
             }
         });
         btn_loadDatabase.addActionListener(e -> {
-            fileChooser.setDialogTitle("加载数据库");
-            int flag = fileChooser.showOpenDialog(null);
-            if (flag == JFileChooser.APPROVE_OPTION) {
-                File file = fileChooser.getSelectedFile();
-                DatabaseController.openDatabase(file.getAbsolutePath());
-                text_databaseName.setText(DatabaseController.getDatabaseName());
-                label_itemSize.setText(list_Database.getModel().getSize() + "条");
-                switch (DatabaseController.getDatabaseType()) {
-                    case XMLDatabase.TYPE_JAVA:
-                        cbo_databaseType.setSelectedItem(DATABASETYPE[0]);
-                        break;
-                    case XMLDatabase.TYPE_JAVAWEB:
-                        cbo_databaseType.setSelectedItem(DATABASETYPE[1]);
-                        break;
-                    case XMLDatabase.TYPE_ANDROID:
-                        cbo_databaseType.setSelectedItem(DATABASETYPE[2]);
-                        break;
-                    default:
-                        cbo_databaseType.setSelectedItem(DATABASETYPE[3]);
-                        break;
+            try {
+                fileChooser.setDialogTitle("加载数据库");
+                int flag = fileChooser.showOpenDialog(null);
+                if (flag == JFileChooser.APPROVE_OPTION) {
+                    File file = fileChooser.getSelectedFile();
+                    DatabaseController.openDatabase(file.getAbsolutePath());
+                    text_databaseName.setText(DatabaseController.getDatabaseName());
+                    label_itemSize.setText(list_Database.getModel().getSize() + "条");
+                    switch (DatabaseController.getDatabaseType()) {
+                        case XMLDatabase.TYPE_JAVA:
+                            cbo_databaseType.setSelectedItem(DATABASETYPE[0]);
+                            break;
+                        case XMLDatabase.TYPE_JAVAWEB:
+                            cbo_databaseType.setSelectedItem(DATABASETYPE[1]);
+                            break;
+                        case XMLDatabase.TYPE_ANDROID:
+                            cbo_databaseType.setSelectedItem(DATABASETYPE[2]);
+                            break;
+                        default:
+                            cbo_databaseType.setSelectedItem(DATABASETYPE[3]);
+                            break;
+                    }
+                    currentWikiItem = new WikiItem();
+                    disableAll();
+                    refresh();
+                    refreshleft();
+                    refreshTitle();
+                    list_Database.setModel(XMLDatabase.getInstance());
+                    list_Database.updateUI();
                 }
-                currentWikiItem = new WikiItem();
-                disableAll();
-                refresh();
-                refreshleft();
-                refreshTitle();
-                list_Database.setModel(XMLDatabase.getInstance());
-                list_Database.updateUI();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(null, "加载数据库失败\n" + ex.toString(), "加载数据库失败", JOptionPane.ERROR_MESSAGE);
             }
         });
         cbo_databaseType.addItemListener(e -> {
@@ -305,6 +310,7 @@ public class MainForm {
         KeyStroke prekeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
         KeyStroke bkeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_B, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
         KeyStroke ikeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_I, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
+        KeyStroke brkeystroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_MASK | InputEvent.SHIFT_MASK);
 
         editor_description.getInputMap().put(likeystroke, "likeystroke");
         editor_description.getActionMap().put("likeystroke", KeyStrokeActionFactory.getAction("li", editor_description));
@@ -320,6 +326,8 @@ public class MainForm {
         editor_description.getActionMap().put("ikeystroke", KeyStrokeActionFactory.getAction("i", editor_description));
         editor_description.getInputMap().put(bkeystroke, "bkeystroke");
         editor_description.getActionMap().put("bkeystroke", KeyStrokeActionFactory.getAction("b", editor_description));
+        editor_description.getInputMap().put(brkeystroke, "brkeystroke");
+        editor_description.getActionMap().put("brkeystroke", KeyStrokeActionFactory.getAction("br", editor_description));
 
         editor_recommand.getInputMap().put(likeystroke, "likeystroke");
         editor_recommand.getActionMap().put("likeystroke", KeyStrokeActionFactory.getAction("li", editor_recommand));
@@ -335,6 +343,8 @@ public class MainForm {
         editor_recommand.getActionMap().put("ikeystroke", KeyStrokeActionFactory.getAction("i", editor_recommand));
         editor_recommand.getInputMap().put(bkeystroke, "bkeystroke");
         editor_recommand.getActionMap().put("bkeystroke", KeyStrokeActionFactory.getAction("b", editor_recommand));
+        editor_recommand.getInputMap().put(brkeystroke, "brkeystroke");
+        editor_recommand.getActionMap().put("brkeystroke", KeyStrokeActionFactory.getAction("br", editor_recommand));
 
         editor_reference.getInputMap().put(likeystroke, "likeystroke");
         editor_reference.getActionMap().put("likeystroke", KeyStrokeActionFactory.getAction("li", editor_reference));
@@ -350,6 +360,8 @@ public class MainForm {
         editor_reference.getActionMap().put("ikeystroke", KeyStrokeActionFactory.getAction("i", editor_reference));
         editor_reference.getInputMap().put(bkeystroke, "bkeystroke");
         editor_reference.getActionMap().put("bkeystroke", KeyStrokeActionFactory.getAction("b", editor_reference));
+        editor_reference.getInputMap().put(brkeystroke, "brkeystroke");
+        editor_reference.getActionMap().put("brkeystroke", KeyStrokeActionFactory.getAction("br", editor_reference));
 
     }
 
