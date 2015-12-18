@@ -95,6 +95,9 @@ public class XMLUtil {
                     case "explanation":
                         item.setDescription(child.getText());
                         break;
+                    case "code":
+                        item.setCode(child.getText());
+                        break;
                     case "demo":
                         break;
                     case "recommand":
@@ -120,6 +123,7 @@ public class XMLUtil {
             itemElement.addElement("level").addText(item.getLevel() + "");
             itemElement.addElement("classify").addText(item.getClassify());
             itemElement.addElement("explanation").addCDATA(item.getDescription());
+            itemElement.addElement("code").addCDATA(item.getCode());
             itemElement.addElement("recommand").addCDATA(item.getRecommand());
             itemElement.addElement("references").addCDATA(item.getReferences());
         }

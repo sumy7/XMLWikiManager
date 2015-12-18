@@ -3,7 +3,6 @@ package com.sumy.xmlwikimanager.view;
 import com.sumy.xmlwikimanager.bean.WikiItem;
 import com.sumy.xmlwikimanager.controller.DatabaseController;
 import com.sumy.xmlwikimanager.dao.XMLDatabase;
-import org.xml.sax.SAXParseException;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -11,7 +10,6 @@ import javax.swing.event.DocumentListener;
 import javax.swing.text.Document;
 import javax.swing.text.JTextComponent;
 import javax.swing.text.html.HTMLEditorKit;
-import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.ItemEvent;
 import java.awt.event.KeyEvent;
@@ -50,6 +48,7 @@ public class MainForm {
     private JTextField text_classify;
     private JTextField text_databaseName;
     private JSplitPane splitPane;
+    private JEditorPane editor_code;
 
     private JFrame outerFrame;
     private JFileChooser fileChooser;
@@ -182,6 +181,7 @@ public class MainForm {
         text_classify.setEnabled(false);
         editor_description.setEnabled(false);
         editor_recommand.setEnabled(false);
+        editor_code.setEnabled(false);
         editor_reference.setEnabled(false);
         cbo_Level.setEnabled(false);
     }
@@ -191,6 +191,7 @@ public class MainForm {
         text_Title.setEnabled(true);
         text_classify.setEnabled(true);
         editor_description.setEnabled(true);
+        editor_code.setEnabled(true);
         editor_recommand.setEnabled(true);
         editor_reference.setEnabled(true);
         cbo_Level.setEnabled(true);
@@ -200,6 +201,7 @@ public class MainForm {
         editor_description.getDocument().addDocumentListener(new DocumentChangeListener(editor_description));
         editor_recommand.getDocument().addDocumentListener(new DocumentChangeListener(editor_recommand));
         editor_reference.getDocument().addDocumentListener(new DocumentChangeListener(editor_reference));
+        editor_code.getDocument().addDocumentListener(new DocumentChangeListener(editor_code));
         text_ID.getDocument().addDocumentListener(new DocumentChangeListener(text_ID));
         text_Title.getDocument().addDocumentListener(new DocumentChangeListener(text_Title));
         text_classify.getDocument().addDocumentListener(new DocumentChangeListener(text_classify));
@@ -208,7 +210,7 @@ public class MainForm {
         btn_formatteItem.addActionListener(e -> {
             String origin = text_ID.getText();
             String newString = origin.replace(" ", "_").toUpperCase()
-                    .replace(":", "").replace("()", "").replace("-", "_")
+                    .replace(":", "_").replace("()", "").replace("-", "_")
                     .replace(".", "_");
             text_ID.setText(newString);
         });
@@ -363,6 +365,23 @@ public class MainForm {
         editor_reference.getInputMap().put(brkeystroke, "brkeystroke");
         editor_reference.getActionMap().put("brkeystroke", KeyStrokeActionFactory.getAction("br", editor_reference));
 
+        editor_code.getInputMap().put(likeystroke, "likeystroke");
+        editor_code.getActionMap().put("likeystroke", KeyStrokeActionFactory.getAction("li", editor_code));
+        editor_code.getInputMap().put(ulkeystroke, "ulkeystroke");
+        editor_code.getActionMap().put("ulkeystroke", KeyStrokeActionFactory.getAction("ul", editor_code));
+        editor_code.getInputMap().put(olkeystroke, "olkeystroke");
+        editor_code.getActionMap().put("olkeystroke", KeyStrokeActionFactory.getAction("ol", editor_code));
+        editor_code.getInputMap().put(pkeystroke, "pkeystroke");
+        editor_code.getActionMap().put("pkeystroke", KeyStrokeActionFactory.getAction("p", editor_code));
+        editor_code.getInputMap().put(prekeystroke, "prekeystroke");
+        editor_code.getActionMap().put("prekeystroke", KeyStrokeActionFactory.getAction("pre", editor_code));
+        editor_code.getInputMap().put(ikeystroke, "ikeystroke");
+        editor_code.getActionMap().put("ikeystroke", KeyStrokeActionFactory.getAction("i", editor_code));
+        editor_code.getInputMap().put(bkeystroke, "bkeystroke");
+        editor_code.getActionMap().put("bkeystroke", KeyStrokeActionFactory.getAction("b", editor_code));
+        editor_code.getInputMap().put(brkeystroke, "brkeystroke");
+        editor_code.getActionMap().put("brkeystroke", KeyStrokeActionFactory.getAction("br", editor_code));
+
     }
 
     private void initReviewPanel() {
@@ -384,6 +403,8 @@ public class MainForm {
             currentWikiItem.setClassify(text_classify.getText());
         } else if (component.equals(editor_description)) {
             currentWikiItem.setDescription(editor_description.getText());
+        } else if (component.equals(editor_code)) {
+            currentWikiItem.setCode(editor_code.getText());
         } else if (component.equals(editor_recommand)) {
             currentWikiItem.setRecommand(editor_recommand.getText());
         } else if (component.equals(editor_reference)) {
@@ -410,6 +431,8 @@ public class MainForm {
                 "<h2>" + item.getItemid() + "</h2>" +
                 "<h1>说明</h1>" +
                 "<div>" + item.getDescription() + "</div>" +
+                "<h1>代码</h1>" +
+                "<div>" + item.getCode() + "</div>" +
                 "<h1>建议</h1>" +
                 "<div>" + item.getRecommand() + "</div>" +
                 "<h1>参考文献</h1>" +
@@ -423,6 +446,8 @@ public class MainForm {
         text_classify.setText(currentWikiItem.getClassify());
         editor_description.setText(currentWikiItem.getDescription());
         editor_description.setCaretPosition(0);
+        editor_code.setText(currentWikiItem.getCode());
+        editor_code.setCaretPosition(0);
         editor_recommand.setText(currentWikiItem.getRecommand());
         editor_recommand.setCaretPosition(0);
         editor_reference.setText(currentWikiItem.getReferences());

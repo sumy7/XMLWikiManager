@@ -17,6 +17,7 @@ public class WikiItem {
     public String description;
     public String recommand;
     public String references;
+    public String code;
 
     public WikiItem() {
         this.id = -1;
@@ -25,17 +26,19 @@ public class WikiItem {
         this.level = LEVEL_UNKNOWN;
         this.classify = "";
         this.description = "";
+        this.code = "";
         this.recommand = "";
         this.references = "";
 
     }
 
-    public WikiItem(String itemid, String title, int level, String classify, String description, String recommand, String references) {
+    public WikiItem(String itemid, String title, int level, String classify, String description, String code, String recommand, String references) {
         this.itemid = itemid;
         this.title = title;
         this.level = level;
         this.classify = classify;
         this.description = description;
+        this.code = code;
         this.recommand = recommand;
         this.references = references;
     }
@@ -46,6 +49,7 @@ public class WikiItem {
         this.level = item.level;
         this.classify = item.classify;
         this.description = item.description;
+        this.code = item.code;
         this.recommand = item.recommand;
         this.references = item.references;
     }
@@ -112,6 +116,14 @@ public class WikiItem {
 
     public void setReferences(String references) {
         this.references = references;
+    }
+
+    public String getCode() {
+        return code;
+    }
+
+    public void setCode(String code) {
+        this.code = code;
     }
 
     public static int parseLevel(String level) {
